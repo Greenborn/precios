@@ -14,6 +14,7 @@ router.use(function (request, response, next) {
 router.use("/user", require("../routes/userAdmin"))
 router.use("/comercios", require("../routes/comercios"))
 router.use("/rbac", require("../routes/rbac"))
+router.use("/alias", require("../routes/alias"))
 
 var paths = [
   { path: "/user/login", public: true },
@@ -24,6 +25,8 @@ var paths = [
   { path: "/user/add_one", permisos: ["usuarios.crear"] },
   { path: "/user/put_one", permisos: ["usuarios.editar"] },
   { path: "/user/delete_one", permisos: ["usuarios.eliminar"] },
+  { path: "/alias", permisos: ["productos.editar"] },
+  { path: "/alias/recargar", permisos: ["productos.editar"] },
   { path: "/rbac/get_roles", permisos: ["roles.ver"] },
   { path: "/rbac/nuevo_rol", permisos: ["roles.crear"] },
   { path: "/rbac/editar_rol", permisos: ["roles.editar"] },

@@ -1,6 +1,7 @@
 require("dotenv").config({ path: '.env' })
 const busqueda_productos = require("./controllers/busqueda_productos")
 const sync_cache = require("./controllers/sync_cache")
+const alias_busqueda_ctrl = require("./controllers/alias_busqueda")
 const { spawn } = require('child_process')
 const path = require('path')
 
@@ -106,7 +107,6 @@ async function regenerar_diccionarios(){
   
   let locales = await global.knex('branch').select()
   let enterprice = await global.knex('enterprice').select()
-  let alias = await global.knex('alias_busqueda').select()
   let category = await global.knex('category').select()
   global.alias_productos = await global.knex('alias_productos').select()
                               .join('products', 'products.id', 'alias_productos.product_id')
@@ -156,9 +156,7 @@ async function regenerar_diccionarios(){
     for (let i=0; i < category.length; i++)
       global.category_diccio[Number(category[i].id)] = category[i]
 
-  if (alias)
-    for (let i=0; i < alias.length; i++)
-      global.alias_busqueda[alias[i].alias.toLowerCase()] = alias[i].termino
+  await recargar_alias_busqueda()
 
   console.log('[regenerar_diccionarios] ✓ Regeneración completada exitosamente')
   console.log(`[regenerar_diccionarios] Estadísticas:`)
@@ -167,6 +165,13 @@ async function regenerar_diccionarios(){
   console.log(`  - Sucursales: ${Object.keys(global.branchs_diccio).length}`)
   console.log(`  - Empresas: ${Object.keys(global.enterprice_diccio).length}`)
   console.log(`  - Categorías: ${Object.keys(global.category_diccio).length}`)
+}
+
+// Recarga en memoria el diccionario alias_busqueda (termino inicial -> termino final)
+async function recargar_alias_busqueda(){
+  const cantidad = await alias_busqueda_ctrl.recargar()
+  console.log(`[alias_busqueda] ${cantidad} alias cargados en memoria`)
+  return cantidad
 }
 
 async function base_de_datos_iniciada(){
@@ -248,4 +253,4 @@ async function base_de_datos_iniciada(){
 }
 
 // Exportar funciones para uso externo
-module.exports = { regenerar_diccionarios }
+module.exports = { regenerar_diccionarios, recargar_alias_busqueda }

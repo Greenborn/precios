@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import json
+import re
 import requests
 import subprocess
 from datetime import datetime, timedelta, date
@@ -74,6 +75,12 @@ cache_productos = {}
 cache_categorias = {}
 cache_branch_enterprise = {}
 
+# Cache de alias_busqueda (termino inicial -> termino final / nombre canonico)
+# Se recarga automaticamente cada ALIAS_BUSQUEDA_TTL segundos
+cache_alias_busqueda = {}
+ALIAS_BUSQUEDA_TTL = 300
+alias_busqueda_ultimo_load = 0
+
 
 def generar_uuid_v7():
     """Genera un UUID v7"""
@@ -81,10 +88,59 @@ def generar_uuid_v7():
 
 
 def limpiar_texto(texto):
-    """Limpia y normaliza texto eliminando espacios extras"""
+    """Limpia y normaliza texto igual que helpers/utils.js del backend Node:
+    elimina caracteres especiales, saltos de linea y espacios duplicados,
+    reemplaza acentos y convierte a minusculas."""
     if not texto:
         return texto
-    return ' '.join(texto.strip().split())
+    texto = re.sub(r'[;{}()\*/\\`\'"]', '', texto)
+    texto = texto.replace('\r', '').replace('\n', '')
+    texto = re.sub(r'\s+', ' ', texto)
+    for acento, vocal in (('á', 'a'), ('é', 'e'), ('í', 'i'), ('ó', 'o'), ('ú', 'u')):
+        texto = texto.replace(acento, vocal)
+    return texto.strip().lower()
+
+
+def cargar_alias_busqueda(forzar=False):
+    """Carga la tabla alias_busqueda en cache. Recarga automatica por TTL."""
+    global cache_alias_busqueda, alias_busqueda_ultimo_load
+    ahora = time.time()
+    if not forzar and cache_alias_busqueda and (ahora - alias_busqueda_ultimo_load) < ALIAS_BUSQUEDA_TTL:
+        return cache_alias_busqueda
+    try:
+        conexion = obtener_conexion()
+        if not conexion:
+            return cache_alias_busqueda
+        cursor = conexion.cursor()
+        cursor.execute("SELECT alias, termino FROM alias_busqueda")
+        filas = cursor.fetchall()
+        cursor.close()
+        conexion.close()
+        nuevo = {}
+        for alias, termino in filas:
+            nuevo[str(alias).lower()] = termino
+        cache_alias_busqueda = nuevo
+        alias_busqueda_ultimo_load = ahora
+        print(f"✓ alias_busqueda cargado en cache ({len(nuevo)} alias)")
+    except Exception as e:
+        print(f"⚠ Error al cargar alias_busqueda: {e}")
+    return cache_alias_busqueda
+
+
+def resolver_nombre_canonico(nombre):
+    """Devuelve el termino final (nombre canonico) definido en alias_busqueda
+    para el nombre recibido (termino inicial). Si no hay definicion devuelve
+    el mismo nombre. El alias tiene prioridad sobre el nombre del producto."""
+    if not nombre:
+        return nombre
+    canonical = limpiar_texto(nombre)
+    aliases = cargar_alias_busqueda()
+    termino_final = aliases.get(canonical.lower())
+    if termino_final:
+        final = limpiar_texto(termino_final)
+        if final:
+            return final
+    return canonical
 
 
 def obtener_conexion():
@@ -248,7 +304,24 @@ def get_producto(cursor, conexion, articulo):
         query = f"UPDATE products SET {', '.join(updates)} WHERE id = %s"
         cursor.execute(query, params)
         conexion.commit()
-    
+
+    # Registrar el nombre original (termino inicial) como alias del producto canonico.
+    # Solo aplica cuando el nombre fue resuelto via alias_busqueda y la variante
+    # aun no existe en alias_productos (unicidad por termino inicial)
+    alias_original = articulo.get('alias_original')
+    if alias_original and producto.get('id'):
+        try:
+            cursor.execute("SELECT 1 FROM alias_productos WHERE alias = %s LIMIT 1", (alias_original,))
+            if not cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO alias_productos (alias, product_id) VALUES (%s, %s)",
+                    (alias_original, producto['id'])
+                )
+                conexion.commit()
+        except Exception as e:
+            print(f"⚠ No se pudo registrar el alias variante: {e}")
+            conexion.rollback()
+
     return producto
 
 
@@ -528,6 +601,13 @@ def procesar_articulo(articulo, fecha_registro=None):
         if len(articulo['name']) > 500:
             articulo['name'] = articulo['name'][:500]
         
+        # Resolucion de nombre canonico segun alias_busqueda (termino inicial -> termino final).
+        # El alias tiene prioridad: si el nombre llega definido como termino inicial, el precio
+        # se guarda contra el producto del termino final y el nombre original queda como variante
+        nombre_original = articulo['name']
+        articulo['name'] = resolver_nombre_canonico(articulo['name'])
+        articulo['alias_original'] = nombre_original if articulo['name'] != nombre_original else None
+        
         # Obtener o crear producto
         producto = get_producto(cursor, conexion, articulo)
         
@@ -766,6 +846,13 @@ def main():
         print("✓ Limpieza inicial de price_today / estadistica_aumento_diario completada")
     except Exception as e:
         print(f"⚠️  Error en limpieza inicial: {e}")
+
+    # Carga inicial de alias_busqueda (termino inicial -> termino final).
+    # Luego se recarga automaticamente cada ALIAS_BUSQUEDA_TTL segundos
+    try:
+        cargar_alias_busqueda(forzar=True)
+    except Exception as e:
+        print(f"⚠️  Error al cargar alias_busqueda inicial: {e}")
     
     while True:
         try:

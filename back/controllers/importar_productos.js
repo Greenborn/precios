@@ -121,16 +121,33 @@ async function get_categoria( trx, articulo ){
 }
 
 
+// Registra el nombre original (termino inicial) como alias del producto canonico.
+// Solo aplica cuando el nombre fue resuelto mediante alias_busqueda y la variante
+// aun no existe en alias_productos (unicidad por termino inicial)
+async function registrar_alias_variante( trx, articulo, producto ){
+    const ALIAS_ORIGINAL = articulo.alias_original
+    if (!ALIAS_ORIGINAL || !producto?.id)
+        return
+    try {
+        const hay_alias = await trx('alias_productos').where('alias', ALIAS_ORIGINAL).first()
+        if (!hay_alias)
+            await trx('alias_productos').insert( { "alias": ALIAS_ORIGINAL, "product_id": producto.id } )
+    } catch (error) {
+        console.log(error, 'no se pudo registrar el alias variante')
+    }
+}
+
+
 async function get_producto( trx, articulo ){
     return new Promise( async (resolve, reject) => {
         try {
-            const NAME = articulo.name
-            //console.log('products_diccio', global.products_diccio[name] )
-            let producto  = (global.products_diccio[NAME]) 
-                            ? global.products_diccio[NAME]
-                            : await global.knex('alias_productos').select()
-                                .join('products', 'products.id', 'alias_productos.product_id')
-                                .where('alias_productos.alias', NAME).first()
+        const NAME = articulo.name
+        //console.log('products_diccio', global.products_diccio[name] )
+        let producto  = (global.products_diccio[NAME]) 
+                        ? global.products_diccio[NAME]
+                        : await global.knex('alias_productos').select()
+                            .join('products', 'products.id', 'alias_productos.product_id')
+                            .where('alias_productos.alias', NAME).first()
             if (producto){
                 let upd = {}
                 let ac = false
@@ -145,6 +162,7 @@ async function get_producto( trx, articulo ){
                 if (ac)
                     await trx('products').update( upd ).where('id','=',producto.id)
 
+                await registrar_alias_variante( trx, articulo, producto )
                 resolve(producto)
                 return
             } else {
@@ -159,6 +177,7 @@ async function get_producto( trx, articulo ){
                 if (articulo?.barcode) insert['barcode'] = articulo.barcode
                 await trx('products').insert( insert ) 
                 
+                await registrar_alias_variante( trx, articulo, insert )
                 resolve(insert)
                 return
             }
@@ -266,6 +285,18 @@ async function procesar_articulo(articulo, fecha_registro ){
 
             if (articulo.name.length > 500)
                 articulo.name = articulo.name.substring(0, 500)
+
+            // Resolucion de nombre canonico segun alias_busqueda (termino inicial -> termino final).
+            // El alias tiene prioridad: si el nombre llega definido como termino inicial, el precio
+            // se guarda contra el producto del termino final y el nombre original queda como variante
+            const TERMINO_FINAL = global.alias_busqueda[articulo.name.toLowerCase()]
+            if (TERMINO_FINAL){
+                const CANONICO = utils.limpiarTexto(TERMINO_FINAL)
+                if (CANONICO && CANONICO !== articulo.name){
+                    articulo.alias_original = articulo.name
+                    articulo.name = CANONICO
+                }
+            }
 
             let producto  = await get_producto( trx, articulo )
             let categoria = await get_categoria( trx, articulo )

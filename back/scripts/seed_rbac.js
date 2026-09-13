@@ -22,6 +22,7 @@ const PERMISOS = [
   { nombre: 'rutas.eliminar',      descripcion: 'Eliminar rutas' },
   { nombre: 'perfil.ver',          descripcion: 'Ver propio perfil' },
   { nombre: 'perfil.editar',       descripcion: 'Editar propio perfil' },
+  { nombre: 'productos.editar',    descripcion: 'Administrar productos y alias de nombres' },
 ]
 
 // Rutas del panel de administracion. El campo "componente" debe coincidir con las
