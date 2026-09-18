@@ -1,91 +1,73 @@
 <template>
-<nav class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
-    <div class="container p-0">
-      <a class="navbar-brand" href="#/">
-        <div class="row align-items-center justify-content-center">
-          <div class="col">
-            <b class="ms-3">Precios de Tandil</b>
-          </div>
-        </div>
-      </a>
+<nav class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary site-navbar">
+    <div class="container">
+      <a class="navbar-brand" href="#/">Precios de Tandil</a>
 
-      <div class="d-flex d-md-none" v-if="storeApp.ruta_actual.path == '/carga_precio'">
-        <div class="w-100" >
-          <div class="row align-items-center justify-content-center">
-            <div class="col-auto p-0">
-              <button class="btn btn-success" type="button" @click="agregar">Agregar</button>
-            </div>
-          </div>
+      <div class="navbar-search d-none d-lg-flex" v-if="storeApp.ruta_actual.path == '/'">
+        <div class="input-group">
+          <input class="form-control" v-model="termino_busqueda" type="text" placeholder="Por ej: Manzana" aria-label="Buscar"
+            @keyup.enter="buscar">
+          <button class="btn btn-buscar" type="button" @click="buscar" aria-label="Buscar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.398a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
+            </svg>
+          </button>
         </div>
       </div>
 
-      <div class="d-flex d-md-none" v-if="storeApp.ruta_actual.path == '/ofertas'">
-        <div class="w-100" >
-          <div class="row align-items-center justify-content-center">
-            <div class="col-auto p-0">
-              <button class="btn btn-success" type="button" @click="filtrar">Filtrar</button>
-            </div>
-          </div>
-        </div>
+      <div class="d-md-none me-2" v-if="storeApp.ruta_actual.path == '/carga_precio'">
+        <button class="btn btn-cuenta" type="button" @click="agregar">Agregar</button>
       </div>
 
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="d-md-none me-2" v-if="storeApp.ruta_actual.path == '/ofertas'">
+        <button class="btn btn-cuenta" type="button" @click="filtrar">Filtrar</button>
+      </div>
+
+      <div class="navbar-filter d-flex me-2" v-if="storeApp.ruta_actual.path == '/categorias'">
+        <input class="form-control" v-model="termino_filtro" type="text" placeholder="Filtrar" aria-label="Filtrar"
+          @keyup="filtrar">
+      </div>
+
+      <button class="navbar-toggler ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
 
-      <div class="d-flex" v-if="storeApp.ruta_actual.path == '/'">
-        <div class="w-100" id="cont_busca">
-          <div class="row align-items-center justify-content-center">
-            <div class="col-auto p-0 me-1">
-              <div class="input-group">
-                <input class="form-control" v-model="termino_busqueda" type="text" placeholder="Por ej: Manzana" aria-label="Buscar" 
-                  @keyup.enter="buscar" ref="caja_busqueda">
-                <button class="btn btn-success" type="button" @click="buscar" aria-label="Buscar">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.398a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="d-flex" v-if="storeApp.ruta_actual.path == '/categorias'">
-        <div class="w-100" id="cont_busca">
-          <div class="row align-items-center justify-content-center">
-            <div class="col-auto p-0 me-1">
-              <input class="form-control me-2" v-model="termino_filtro" type="text" placeholder="Filtrar" aria-label="Filtrar" 
-              @keyup="filtrar" ref="caja_busqueda">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      
-      
       <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ml-auto p-3 align-items-center justify-content-center">
+        <ul class="navbar-nav ms-auto align-items-center gap-lg-2">
           <li class="nav-item" v-for="(enlace) in enlaces" :key="enlace">
             <span class="nav-link" @click="click(enlace)"
                 :class="{ active: storeApp.ruta_actual.path == enlace.path }">{{ enlace.title }}</span>
           </li>
-          <li class="nav-item" v-if="!isLogged">
-            <button class="btn btn-success" type="button" @click="irIngresar">Ingresar</button>
+          <li class="nav-item ms-lg-2" v-if="!isLogged">
+            <button class="btn btn-cuenta" type="button" @click="irIngresar">Ingresar</button>
           </li>
-          <li class="nav-item" v-else>
-            <button class="btn btn-success" type="button" @click="irDashboard">
+          <li class="nav-item ms-lg-2" v-else>
+            <button class="btn btn-cuenta" type="button" @click="irDashboard">
               <i class="bi bi-person-circle me-1"></i>{{ storeApp.userInfo?.name || 'Mi cuenta' }}
             </button>
           </li>
         </ul>
-      </div>  
+      </div>
     </div>
-</nav>
+
+    <div class="navbar-search-row d-lg-none" v-if="storeApp.ruta_actual.path == '/'">
+      <div class="container py-2">
+        <div class="input-group">
+          <input class="form-control" v-model="termino_busqueda" type="text" placeholder="Por ej: Manzana" aria-label="Buscar"
+            @keyup.enter="buscar">
+          <button class="btn btn-buscar" type="button" @click="buscar" aria-label="Buscar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.398a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watchEffect } from 'vue'
 
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
@@ -110,6 +92,10 @@ const enlaces = ref([
     //{ path: '/calcula_trueque', title: 'Calcula Trueque' },
     { path: '/aporta', url: "https://cafecito.app/tandil_precios", title: 'Quiero Aportar' }
 ])
+
+watchEffect(() => {
+  document.body.classList.toggle('cls-search-row', route.path === '/')
+})
 
 function click( item ){
     if (item?.url){
@@ -156,20 +142,77 @@ onMounted(()=>{
 </script>
 
 <style>
-#cont_busca{
-  padding-left: 4rem;
+.site-navbar {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+  padding-block: 0.65rem;
+  background-color: rgb(0, 38, 94);
 }
 
-.nav-link{
-    cursor: pointer;
+.site-navbar .navbar-brand {
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
-.input-group .form-control {
-    border-bottom: 2px solid #ced4da;
-    transition: box-shadow 0.2s, border-color 0.2s;
+.navbar-search {
+  width: min(420px, 42vw);
+  margin-inline: auto;
 }
-.input-group .form-control:focus {
-    box-shadow: 0 0 0 0.2rem rgba(32, 201, 151, 0.25);
-    border-color: #20c997;
+
+.navbar-filter {
+  width: min(260px, 50vw);
+}
+
+.navbar-search-row {
+  background-color: rgb(0, 38, 94);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-buscar {
+  background-color: #20c997;
+  border-color: #20c997;
+  color: #fff;
+}
+
+.btn-buscar:hover,
+.btn-buscar:focus {
+  background-color: #1aa87f;
+  border-color: #1aa87f;
+  color: #fff;
+}
+
+.btn-cuenta {
+  background-color: #20c997;
+  border-color: #20c997;
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.btn-cuenta:hover,
+.btn-cuenta:focus {
+  background-color: #1aa87f;
+  border-color: #1aa87f;
+  color: #fff;
+}
+
+.site-navbar .nav-link {
+  cursor: pointer;
+  color: #cfcfcf;
+  transition: color 0.15s ease;
+}
+
+.site-navbar .nav-link:hover {
+  color: #fff;
+}
+
+.site-navbar .nav-link.active {
+  color: #fff;
+  box-shadow: inset 0 -2px 0 #20c997;
+}
+
+@media (max-width: 991.98px) {
+  body.cls-search-row #buscador-cnt {
+    margin-top: 8.5rem;
+  }
 }
 </style>
