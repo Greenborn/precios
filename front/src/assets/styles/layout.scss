@@ -13,16 +13,20 @@ body{
 .login-container {
   height: 100vh;
   width: 100vw;
-  background-color: variables.$bg;
-  color: #FFF;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(32, 201, 151, 0.12), transparent 45%),
+    linear-gradient(160deg, #2d3a4b 0%, #1e2a38 100%);
+  color: #374151;
 
   .form-cont{
-    border: 1px solid #FFF;
+    background: #fff;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    padding: 3rem 2.5rem;
     height: fit-content;
-  }
-
-  .title{
-    
+    margin-block: auto;
   }
 }
 

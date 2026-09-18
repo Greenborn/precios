@@ -2,7 +2,9 @@ const express = require('express')
 var router = express.Router()
 module.exports = router
 const bcrypt = require('bcrypt')
+const axios = require('axios')
 const { firmar_token, cargar_usuario } = require('../helpers/auth')
+const sso = require('../sso')
 
 const FIELDS_DEF_USUARIOS = [
   { field: 'id',     headerName: 'ID',     sortable: true },
@@ -63,8 +65,60 @@ router.post('/login', async function (req, res) {
   }
 })
 
+// POST /sso_login - inicio de sesión vía SSO Greenborn (Google) (pública)
+// Recibe el bearer token del SSO + unique_id, lo verifica contra el SSO,
+// busca/crea el usuario local y emite el JWT local (misma respuesta que /login).
+router.post('/sso_login', async function (req, res) {
+  const { token, unique_id } = req.body || {}
+  if (!token || !unique_id) return responder_err(res, 'Token y unique_id son requeridos')
+
+  try {
+    const response = await sso.verifySsoToken(token, unique_id)
+    if (!response?.data?.success || !response?.data?.data?.valid) {
+      return responder_err(res, 'Token SSO inválido o expirado', 'DO_LOGIN')
+    }
+
+    const sso_user = response.data.data.user
+    if (!sso_user?.email) return responder_err(res, 'El SSO no devolvió email de usuario', 'DO_LOGIN')
+
+    const usuario = await sso.syncSsoUser(sso_user)
+    if (!usuario) return responder_err(res, 'No se pudo obtener/crear el usuario', 'DO_LOGIN')
+
+    const u_data = await cargar_usuario(usuario.id)
+    if (!u_data) return responder_err(res, 'Usuario no encontrado', 'DO_LOGIN')
+
+    const token_local = firmar_token({ id: usuario.id, email: usuario.email })
+
+    responder_ok(res, {
+      token: token_local,
+      u_data: {
+        id: u_data.id,
+        name: u_data.name,
+        email: u_data.email,
+        rutas: u_data.rutas,
+      },
+    })
+  } catch (error) {
+    console.log('[userAdmin] Error en sso_login:', error?.response?.data || error)
+    responder_err(res, 'Error al validar la sesión SSO')
+  }
+})
+
 // POST /logout
 router.post('/logout', async function (req, res) {
+  // Si la sesión inició por SSO se revoca también en el SSO central (best-effort)
+  const { sso_token, unique_id } = req.body || {}
+  if (sso_token && unique_id) {
+    try {
+      await axios.post(`${sso.ssoBaseUrl}/auth/logout`, null, {
+        params: { unique_id },
+        headers: { Authorization: `Bearer ${sso_token}` },
+        timeout: 5000,
+      })
+    } catch (error) {
+      console.log('[userAdmin] Logout SSO (best-effort) falló:', error?.response?.status || error.message)
+    }
+  }
   responder_ok(res, { message: 'Sesión cerrada' })
 })
 

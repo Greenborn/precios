@@ -51,6 +51,11 @@ export const routes = [
     component: () => import("./pages/LoginAdmin.vue"),
   },
   {
+    path: "/admin/login-redirect",
+    name: "login_redirect",
+    component: () => import("./pages/LoginRedirect.vue"),
+  },
+  {
     path: '/404',
     name: '404',
     component: () => import('./pages/NotFound.vue')

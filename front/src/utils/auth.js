@@ -4,13 +4,14 @@ import Layout from '../components/layout/Layout.vue'
 import { routes as rutas_iniciales } from "../router";
 
 import { info as infoAdmins, logout as logoutAdmins } from '../api/admin/userAdmin'
+import { datos_logout_sso, limpiar_sso } from '../utils/sso'
 
 import { referencias_componentes } from '../components/referencias_importables'
 
 const tiposUsuario = {
-  'admin':{ 
+  'admin':{
     api_get_info: ()=>{ return infoAdmins() },
-    api_logout:()=>{  return logoutAdmins() }
+    api_logout:()=>{  return logoutAdmins( datos_logout_sso() ) }
   },
 }
 
@@ -28,6 +29,7 @@ async function do_logout( storeApp, router ){
   let logout_rpt = await tiposUsuario[ storeApp.tipoUsuario ].api_logout()
 
   if (logout_rpt) {
+    limpiar_sso()
     setUserInfo( 'admin', storeApp, undefined, router, null)
     router.replace({ path: '/' })
   } else {

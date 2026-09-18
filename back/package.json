@@ -25,6 +25,7 @@
     "csv-writer": "^1.6.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-greenborn-sso-back": "^1.6.0",
     "express-ws": "^5.0.2",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.3.0",

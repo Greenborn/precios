@@ -18,6 +18,7 @@ router.use("/alias", require("../routes/alias"))
 
 var paths = [
   { path: "/user/login", public: true },
+  { path: "/user/sso_login", public: true },
   { path: "/user/logout" },
   { path: "/user/info" },
   { path: "/user/guardar_config" },

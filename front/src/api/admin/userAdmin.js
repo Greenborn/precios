@@ -8,6 +8,14 @@ export function login(data) {
   })
 }
 
+export function ssoLogin(data) {
+  return request({
+    url: '/user/sso_login',
+    method: 'post',
+    data
+  })
+}
+
 export function signup(data) {
   return request({
     url: '/user/signup',
@@ -24,10 +32,11 @@ export function info() {
   })
 }
 
-export function logout() {
+export function logout(data = {}) {
   return request({
     url: '/user/logout',
-    method: 'post'
+    method: 'post',
+    data
   })
 }
 

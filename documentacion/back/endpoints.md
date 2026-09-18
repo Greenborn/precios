@@ -761,7 +761,44 @@ El módulo RBAC gestiona usuarios, roles, permisos y rutas del panel de administ
 - **Validación**: Email y password requeridos
 - **Transaccional**: No
 
-### 1.2 Información de Sesión
+### 1.2 Login SSO (Google)
+**POST** `/admin/user/sso_login`
+
+Inicia sesión mediante el servicio SSO central de Greenborn (`auth.greenborn.com.ar`, app_id `"precios"`). El frontend redirige a `{SSO}/auth/google?url_redireccion_app=...&unique_id=...`, el SSO vuelve a `/#/admin/login-redirect?token=<temporal>&unique_id=...`, el front canjea el token temporal por un bearer (`POST {SSO}/auth/login`) y lo envía aquí. El backend verifica el bearer contra `GET {SSO}/auth/verify`, busca el usuario local por email (lo crea automáticamente con rol `SSO_DEFAULT_ROL` si no existe) y emite el JWT local igual que `/login`.
+
+#### Body
+```json
+{ "token": "<bearer_token_sso>", "unique_id": "req_..." }
+```
+
+#### Respuesta Exitosa (200)
+```json
+{
+  "stat": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "u_data": {
+      "id": 2,
+      "name": "Nombre de Google",
+      "email": "usuario@gmail.com",
+      "rutas": []
+    }
+  }
+}
+```
+
+#### Respuesta de Error (200)
+```json
+{ "stat": false, "text": "Token SSO inválido o expirado", "code": "DO_LOGIN" }
+```
+
+#### Características
+- **Autenticación**: No requerida (público)
+- **Variables de entorno**: `URL_AUTH_SERVICE`, `SSO_DEFAULT_ROL`
+- **Librería**: `express-greenborn-sso-back` (verificación contra el SSO con caché de 12 h)
+- **Auto-registro**: usuarios nuevos se crean con contraseña inutilizable y sin rutas asignadas
+
+### 1.3 Información de Sesión
 **GET** `/admin/user/info`
 
 #### Headers
@@ -785,15 +822,22 @@ x-api-key: <token>
 #### Características
 - **Autenticación**: Requerida
 
-### 1.3 Logout
+### 1.4 Logout
 **POST** `/admin/user/logout`
+
+Si la sesión inició por SSO, el frontend envía en el body `sso_token` (bearer del SSO) y `unique_id`; el backend revoca la sesión en el SSO central (best-effort).
+
+#### Body (opcional)
+```json
+{ "sso_token": "<bearer_token_sso>", "unique_id": "req_..." }
+```
 
 #### Respuesta Exitosa (200)
 ```json
 { "stat": true, "data": { "message": "Sesión cerrada" } }
 ```
 
-### 1.4 Actualizar Cuenta Propia
+### 1.5 Actualizar Cuenta Propia
 **PUT** `/admin/user/guardar_config`
 
 #### Body
