@@ -60,7 +60,7 @@ async function guardar(){
         storeApp.mostrar_alerta('Precio cargado, se mostrará en próxima búsqueda, diferenciado')
     } else {
         storeApp.loading = false
-        storeApp.mostrar_alerta(res.error)
+        storeApp.mostrar_alerta(res?.error || res?.text || 'No se pudo cargar el precio')
     }
     
 }

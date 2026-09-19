@@ -19,6 +19,7 @@ export const routes = [
     path: "/carga_precio",
     name: "carga_precio",
     component: () => import("./pages/CargaComunitaria.vue"),
+    meta: { requiere_sesion: true },
   },
   {
     path: "/novedades",

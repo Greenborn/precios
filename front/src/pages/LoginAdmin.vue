@@ -55,7 +55,7 @@
 
         <div class="row">
           <div class="col">
-            <button type="button" class="btn btn-google w-100" v-on:click="iniciar_sso()">
+            <button type="button" class="btn btn-google w-100" v-on:click="iniciar_sso_destino()">
               <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -75,7 +75,7 @@
 
 <script setup >
 import useVuelidate from '@vuelidate/core'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { required, email } from '@vuelidate/validators'
 import { ref } from 'vue';
 import Spinner   from '../components/layout/Spinner.vue'
@@ -83,7 +83,7 @@ import Spinner   from '../components/layout/Spinner.vue'
 import { AppStore } from "../stores/app";
 import { login } from '../api/admin/userAdmin'
 import { setUserInfo } from '../utils/auth'
-import { iniciar_sso } from '../utils/sso'
+import { iniciar_sso, setRedirectAfterLogin } from '../utils/sso'
 
 const storeApp = AppStore();
 
@@ -96,6 +96,19 @@ const login_data = ref({
 const error_login = ref('')
 
 const router = useRouter()
+const route = useRoute()
+
+// Destino post-login: la ruta original (query redirect) o el panel por defecto
+function destino_post_login(){
+  return route.query.redirect || '/admin/dashboard'
+}
+
+// El flujo SSO pierde la query al volver del SSO central,
+// por eso el destino se guarda en localStorage antes de redirigir
+function iniciar_sso_destino(){
+  setRedirectAfterLogin(route.query.redirect)
+  iniciar_sso()
+}
 
 async function do_login() {
   storeApp.loading = true
@@ -104,7 +117,7 @@ async function do_login() {
   if (login_req.stat) {
     storeApp.loading = false
     setUserInfo( 'admin', storeApp, login_req.data.u_data, router, login_req.data.token)
-    router.replace('/admin/dashboard')
+    router.replace(destino_post_login())
   } else {
     storeApp.loading = false
     error_login.value = login_req?.text || login_req?.msg || 'Email o contraseña incorrectos'

@@ -154,113 +154,341 @@ router.put('/cargar_nuevo_precio', async function (req, res) {
         }
         console.log(diccio_limit)
 
-        const HOY = new Date()
+        const registro = await registrar_precio_usuario(
+            req.session?.u_data, PROD_ID, BRANCH_ID, PRICE, new Date(),
+            "Precios de la Gente - ingresado por formulario de corrección de precio"
+        )
 
-        // Limpiar price_today: conservar solo hoy y ayer
-        // (borrar todo registro con date_time anterior al inicio del día de ayer)
-        let AYER = new Date(HOY)
-        AYER.setHours(0,0,0,0)
-        AYER.setDate(AYER.getDate() - 1)
+        if (registro)
+            res.status(200).send({ stat: true })
+        else
+            res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
+    } catch (error) {
+        console.log("error", error)
+        res.status(200).send({ stat: false,  error: "Error interno, reintente luego" })
+    }    
+})
 
-        const insert = {
-            "product_id": PROD_ID,
-            "price": PRICE,
-            "date_time": new Date(),
-            "branch_id": BRANCH_ID,
-            "es_oferta": 0,
-            "confiabilidad": 50,
-            "url": null,
-            "notas": "Precios de la Gente - ingresado por formulario de corrección de precio"
-        }
+// Registra un precio cargado por un usuario: inserta en price (histórico) con los
+// datos del autor, actualiza price_today y sincroniza buscador y caches en memoria.
+// Solo entra a price_today/buscador si la fecha cae dentro de la ventana hoy+ayer.
+// Devuelve el registro insertado o null si falla.
+async function registrar_precio_usuario(usuario, product_id, branch_id, price, fecha, notas) {
+    const AHORA = (fecha instanceof Date && !isNaN(fecha.getTime())) ? fecha : new Date()
 
-        try {
-            const trx = await global.knex.transaction()
-            const [nuevo_id] = await trx('price').insert( insert )
-            insert.id = nuevo_id
+    const HOY = new Date()
+    let AYER = new Date(HOY)
+    AYER.setHours(0,0,0,0)
+    AYER.setDate(AYER.getDate() - 1)
 
-            // Limpiar price_today (misma ventana hoy+ayer)
-            await trx('price_today').where('date_time', '<', AYER).del()
+    const insert = {
+        "id": uuid.v7(),
+        "product_id": product_id,
+        "price": price,
+        "date_time": AHORA,
+        "branch_id": branch_id,
+        "es_oferta": 0,
+        "confiabilidad": 50,
+        "url": null,
+        "notas": notas,
+        "user_id": usuario?.id || null,
+        "user_nombre": usuario?.name || null,
+        "user_apellido": usuario?.apellido || null
+    }
 
-            // Obtener el nombre del producto para price_today
-            const producto_db = await trx('products').where('id', PROD_ID).first()
-            const product_name = producto_db?.name || null
+    try {
+        const trx = await global.knex.transaction()
+        const nuevo_id = insert.id
+        await trx('price').insert( insert )
 
+        // Limpiar price_today (misma ventana hoy+ayer)
+        await trx('price_today').where('date_time', '<', AYER).del()
+
+        // Obtener el nombre del producto para price_today
+        const producto_db = await trx('products').where('id', product_id).first()
+        const product_name = producto_db?.name || null
+
+        if (AHORA >= AYER) {
             // Buscar si ya existe registro para product_id y branch_id
             let existe = await trx('price_today')
-                .where({ product_id: PROD_ID, branch_id: BRANCH_ID })
+                .where({ product_id: product_id, branch_id: branch_id })
                 .first()
 
             if (!existe) {
                 await trx('price_today').insert({
                     "id": uuid.v7(),
-                    "product_id": PROD_ID,
-                    "price": PRICE,
+                    "product_id": product_id,
+                    "price": price,
                     "date_time": insert.date_time,
-                    "branch_id": BRANCH_ID,
+                    "branch_id": branch_id,
                     "es_oferta": 0,
                     "confiabilidad": 50,
                     "url": null,
-                    "notas": insert.notas,
+                    "notas": notas,
                     "time": insert.date_time,
                     "product_name": product_name,
-                    "price_id": nuevo_id
+                    "price_id": nuevo_id,
+                    "user_id": insert.user_id,
+                    "user_nombre": insert.user_nombre,
+                    "user_apellido": insert.user_apellido
                 });
             } else {
                 await trx('price_today')
-                    .where({ product_id: PROD_ID, branch_id: BRANCH_ID })
+                    .where({ product_id: product_id, branch_id: branch_id })
                     .update({
-                        price: PRICE,
+                        price: price,
                         date_time: insert.date_time,
                         es_oferta: 0,
                         confiabilidad: 50,
                         url: null,
-                        notas: insert.notas,
+                        notas: notas,
                         time: insert.date_time,
                         product_name: product_name,
-                        price_id: nuevo_id
+                        price_id: nuevo_id,
+                        user_id: insert.user_id,
+                        user_nombre: insert.user_nombre,
+                        user_apellido: insert.user_apellido
                     });
             }
+        }
 
+        await trx.commit()
+
+        // Sincronizar estructura de búsqueda en tiempo real
+        if (product_name && AHORA >= AYER) {
+            busqueda_productos.agregar_a_buscador({
+                product_name: product_name,
+                product_id: product_id,
+                price: price,
+                branch_id: branch_id,
+                date_time: insert.date_time,
+                time: insert.date_time,
+                url: null,
+                user_id: insert.user_id,
+                user_nombre: insert.user_nombre,
+                user_apellido: insert.user_apellido
+            });
+
+            // Actualizar caches de precios y productos por categoría
+            await sync_cache.actualizar_precio({
+                id: uuid.v7(),
+                product_id: product_id,
+                branch_id: branch_id,
+                price: price,
+                product_name: product_name,
+                date_time: insert.date_time,
+                time: insert.date_time,
+                es_oferta: 0,
+                confiabilidad: 50,
+                notas: notas,
+                url: null,
+                price_id: nuevo_id
+            });
+        }
+
+        return insert
+    } catch (error) {
+        console.log("error al registrar precio de usuario", error)
+        return null
+    }
+}
+
+// Normaliza texto igual que regenerar_diccionarios (sin diacríticos salvo ñ, minúsculas)
+function normalizar_nombre_busqueda(texto) {
+    return String(texto).normalize('NFD')
+        .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi,"$1")
+        .normalize().toLowerCase()
+}
+
+// Busca el vendor (marca) por nombre; si no existe lo crea.
+// products.vendor_id es NOT NULL, por lo que sin marca se usa "Sin Marca".
+async function resolver_vendor_form(marca) {
+    const nombre = (String(marca || '').trim()) || 'Sin Marca'
+    const existente = await global.knex('vendor')
+        .whereRaw('LOWER(name) = ?', [nombre.toLowerCase()])
+        .first()
+    if (existente) return existente.id
+
+    const [id] = await global.knex('vendor').insert({ name: nombre })
+    return Number(id)
+}
+
+// Busca el producto por diccionario en memoria / alias / nombre exacto;
+// si no existe lo crea junto a su alias (patrón de importar_productos.get_producto)
+async function resolver_producto_form(nombre_canonico, marca) {
+    try {
+        const clave = normalizar_nombre_busqueda(nombre_canonico)
+        if (global.products_diccio[clave])
+            return global.products_diccio[clave]
+
+        let producto = await global.knex('alias_productos')
+            .join('products', 'products.id', 'alias_productos.product_id')
+            .whereRaw('LOWER(alias_productos.alias) = ?', [nombre_canonico.toLowerCase()])
+            .first()
+        if (producto) return producto
+
+        producto = await global.knex('products')
+            .whereRaw('LOWER(name) = ?', [nombre_canonico.toLowerCase()])
+            .first()
+        if (producto) return producto
+
+        const ID_NUEVO_PROD = uuid.v7()
+        const nuevo = { id: ID_NUEVO_PROD, name: nombre_canonico, vendor_id: await resolver_vendor_form(marca) }
+        await global.knex('products').insert( nuevo )
+        await global.knex('alias_productos').insert({ alias: nombre_canonico, product_id: ID_NUEVO_PROD })
+
+        // Actualizar diccionarios en memoria (best-effort)
+        global.products_diccio[clave] = nuevo
+        global.products_diccio_id[ID_NUEVO_PROD] = nuevo
+
+        return nuevo
+    } catch (error) {
+        console.log('[cargar_precios_formulario] no se pudo obtener/crear el producto', error)
+        return null
+    }
+}
+
+// Busca la empresa por nombre (case-insensitive) y su primera sucursal;
+// si no existe crea empresa+sucursal (patrón de routes/comercios.js) y
+// regenera diccionarios para que el comercio quede disponible en búsquedas.
+async function resolver_comercio_form(nombre_comercio) {
+    try {
+        const empresa = await global.knex('enterprice')
+            .whereRaw('LOWER(name) = ?', [nombre_comercio.toLowerCase()])
+            .first()
+
+        if (empresa) {
+            let sucursal = await global.knex('branch')
+                .where({ enterprise_id: empresa.id })
+                .orderBy('id', 'asc')
+                .first()
+            if (!sucursal) {
+                const [bid] = await global.knex('branch').insert({
+                    branch_name: empresa.name, enterprise_id: empresa.id
+                })
+                sucursal = { id: Number(bid) }
+            }
+            return { enterprise_id: empresa.id, branch_id: sucursal.id }
+        }
+
+        const trx = await global.knex.transaction()
+        try {
+            const [eid] = await trx('enterprice').insert({ name: nombre_comercio, active: true })
+            const [bid] = await trx('branch').insert({
+                branch_name: nombre_comercio, enterprise_id: Number(eid)
+            })
             await trx.commit()
 
-            // Sincronizar estructura de búsqueda en tiempo real
-            if (product_name) {
-                busqueda_productos.agregar_a_buscador({
-                    product_name: product_name,
-                    product_id: PROD_ID,
-                    price: PRICE,
-                    branch_id: BRANCH_ID,
-                    date_time: insert.date_time,
-                    time: insert.date_time,
-                    url: null
-                });
-
-                // Actualizar caches de precios y productos por categoría
-                await sync_cache.actualizar_precio({
-                    id: uuid.v7(),
-                    product_id: PROD_ID,
-                    branch_id: BRANCH_ID,
-                    price: PRICE,
-                    product_name: product_name,
-                    date_time: insert.date_time,
-                    time: insert.date_time,
-                    es_oferta: 0,
-                    confiabilidad: 50,
-                    notas: insert.notas,
-                    url: null,
-                    price_id: nuevo_id
-                });
+            try {
+                const { regenerar_diccionarios } = require('../server')
+                await regenerar_diccionarios()
+            } catch (err) {
+                console.log('[cargar_precios_formulario] no se pudieron regenerar diccionarios', err)
             }
 
-            res.status(200).send({ stat: true })
-        } catch (error) {
-            console.log("error al registrar precio corregido", error)
-            res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
+            return { enterprise_id: Number(eid), branch_id: Number(bid) }
+        } catch (err) {
+            await trx.rollback()
+            throw err
         }
     } catch (error) {
-        console.log("error", error)
-        res.status(200).send({ stat: false,  error: "Error interno, reintente luego" })
-    }    
+        console.log('[cargar_precios_formulario] no se pudo obtener/crear el comercio', error)
+        return null
+    }
+}
+
+// Carga masiva de precios desde el formulario comunitario (/carga_precio).
+// Requiere sesión activa (no está declarado como público en middleware/Publico.js):
+// tanto rol administrador como usuario pueden publicar. Cada precio queda registrado
+// en la base de datos (price/price_today) con el nombre y apellido del autor.
+router.put('/cargar_precios_formulario', async function (req, res) {
+    try {
+        const usuario = req.session?.u_data
+        if (!usuario){
+            res.status(200).send({ stat: false, code: "DO_LOGIN", text: "No hay sesion activa" })
+            return
+        }
+
+        const COMERCIO = String(req.body?.comercio || '').trim()
+        const PRODUCTOS = Array.isArray(req.body?.productos) ? req.body.productos : []
+
+        // Fechas "YYYY-MM-DD" se interpretan al mediodía local para evitar el
+        // corrimiento de día que produce new Date() con UTC en zona Argentina
+        let FECHA = new Date()
+        if (req.body?.fecha){
+            const solo_fecha = String(req.body.fecha).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+            FECHA = solo_fecha
+                ? new Date(Number(solo_fecha[1]), Number(solo_fecha[2]) - 1, Number(solo_fecha[3]), 12, 0, 0)
+                : new Date(req.body.fecha)
+        }
+        if (isNaN(FECHA.getTime()))
+            FECHA = new Date()
+
+        if (!COMERCIO || PRODUCTOS.length == 0){
+            res.status(200).send({ stat: false, error: "Faltan datos: comercio y al menos un producto son requeridos" })
+            return
+        }
+
+        // Rate limit por IP (mismo diccionario que la corrección de precios)
+        let IP = req.header('x-forwarded-for')
+        if (IP == undefined)
+            IP = 'NO_IP'
+        if (diccio_limit[IP] === undefined){
+            diccio_limit[IP] = { cantidad: 1 }
+        } else {
+            if (Number(new Date().getTime()) - diccio_limit[IP]['ultimo_intento'] < 3000){
+                res.status(200).send({ stat: false,  error: "Pasó muy poco tiempo del último ingreso!" })
+                return
+            }
+        }
+        diccio_limit[IP]['ultimo_intento'] = Number(new Date().getTime())
+        diccio_limit[IP]['cantidad'] += 1
+        if (diccio_limit[IP]['cantidad'] > 100){
+            res.status(200).send({ stat: false,  error: "Superó la cantidad máxima de ingresos, reintente mañana" })
+            return
+        }
+
+        const datos_comercio = await resolver_comercio_form(COMERCIO)
+        if (!datos_comercio){
+            res.status(200).send({ stat: false, error: "No se pudo registrar el comercio, reintente luego" })
+            return
+        }
+
+        let cargados = 0
+        let con_error = 0
+        for (let i = 0; i < PRODUCTOS.length && i < 100; i++){
+            const item = PRODUCTOS[i]
+            const nombre_canonico = [item?.nombre, item?.marca, item?.presentacion]
+                .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+            const precio = Number(item?.precio)
+
+            if (!nombre_canonico || !precio || precio <= 0){
+                con_error++
+                continue
+            }
+
+            const producto = await resolver_producto_form(nombre_canonico, item?.marca)
+            if (!producto){
+                con_error++
+                continue
+            }
+
+            const registro = await registrar_precio_usuario(
+                usuario, producto.id, datos_comercio.branch_id, precio, FECHA,
+                "Precios de la Gente - cargado por formulario comunitario"
+            )
+            if (registro) cargados++
+            else con_error++
+        }
+
+        if (cargados == 0)
+            res.status(200).send({ stat: false, error: "No se pudo cargar ningún precio, verifique los datos e reintente" })
+        else
+            res.status(200).send({ stat: true, items: { cargados: cargados, con_error: con_error } })
+    } catch (error) {
+        console.log("error al cargar precios por formulario", error)
+        res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
+    }
 })
 
 // Identificador único de cola (productos + ofertas)

@@ -18,6 +18,7 @@
   const formulario_config = ref({
     'id': '',
     'name': '',
+    'apellido': '',
     'email': '',
     'pass': '********',
     'pass_repeat': '********',
@@ -28,6 +29,7 @@
   const campos_form_config = ref([
     { field: 'id',          visible_form: false },
     { field: 'name',        headerName: 'Nombre', required: true, form_min_max: [2, 64]  },
+    { field: 'apellido',    headerName: 'Apellido', form_min_max: [2, 128] },
     { field: "email",       headerName: "Email",  required: true, form_min_max: [2, 255] },
     { field: "pass",        headerName: "Contraseña", required: true,  form_min_max: [2, 128], form_type: 'password' },
     { field: "pass_repeat", headerName: 'Repetir contraseña', required: true, form_type: 'password'  },
@@ -51,9 +53,10 @@
   }
 
   function actualizar_modelo(){
-    formulario_config.value.name  = storeApp.userInfo.name
-    formulario_config.value.email = storeApp.userInfo.email
-    formulario_config.value.id    = storeApp.userInfo.id
+    formulario_config.value.name     = storeApp.userInfo.name
+    formulario_config.value.apellido = storeApp.userInfo.apellido || ''
+    formulario_config.value.email    = storeApp.userInfo.email
+    formulario_config.value.id       = storeApp.userInfo.id
     ref_formulario.value.actualizar_modelo()
   }
 

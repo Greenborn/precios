@@ -335,6 +335,8 @@ GET /publico/productos/all?category_id=ID
 PUT /publico/productos/cargar_nuevo_precio
 ```
 
+> 🔐 **Requiere sesión activa** (JWT en `x-api-key`). No es una ruta pública: usuarios no logueados reciben `{ stat: false, code: "DO_LOGIN" }`. Cualquier usuario logueado (roles `administrador` o `usuario`) puede publicar. El precio queda registrado con el `user_id`, nombre y apellido del autor.
+
 **Body JSON**:
 ```json
 {
@@ -350,6 +352,7 @@ PUT /publico/productos/cargar_nuevo_precio
 - ✅ Esperar 3 segundos mínimo entre ingresos
 - ✅ Max 1 corrección por combinación producto-sucursal
 - ✅ Marca confiabilidad = 50
+- ✅ Registra autor (`user_id`, `user_nombre`, `user_apellido`)
 
 **Respuesta 200 (Éxito)**:
 ```json
@@ -374,6 +377,58 @@ PUT /publico/productos/cargar_nuevo_precio
   "error": "Invalid product_id or branch_id"
 }
 ```
+
+---
+
+### Cargar Precios desde Formulario Comunitario
+
+```http
+PUT /publico/productos/cargar_precios_formulario
+```
+
+> 🔐 **Requiere sesión activa** (JWT en `x-api-key`). Utilizado por la página `/carga_precio` (Carga Colaborativa de Precios). Los precios se insertan **directamente** en la base de datos (`price` + `price_today`) con el nombre y apellido del usuario que los cargó; no pasan por la cola de validación `formulario_carga_comunitaria`.
+
+**Body JSON**:
+```json
+{
+  "comercio": "Supermercado X",
+  "fecha": "2026-09-18",
+  "productos": [
+    { "nombre": "Arroz", "marca": "Marolio", "presentacion": "1Kg", "precio": 1200 }
+  ]
+}
+```
+
+**Comportamiento**:
+- 🔎 Resuelve el producto por alias/nombre (`products_diccio`, `alias_productos`, `products`); si no existe lo crea junto a su alias
+- 🏪 Resuelve el comercio por nombre (`enterprice` case-insensitive) y su primera sucursal; si no existe crea empresa+sucursal y regenera diccionarios
+- 📅 Solo las fechas dentro de la ventana hoy+ayer entran a `price_today` y al buscador; las anteriores quedan solo en el histórico `price`
+- ✍️ Cada precio queda con `user_id` / `user_nombre` / `user_apellido` y `confiabilidad = 50`
+- ✅ Rate limit: mínimo 3s entre envíos y máximo 100 envíos diarios por IP; hasta 100 productos por envío
+
+**Respuesta 200 (Éxito)**:
+```json
+{
+  "stat": true,
+  "items": { "cargados": 2, "con_error": 0 }
+}
+```
+
+**Respuesta 200 (Sesión inactiva)**:
+```json
+{ "stat": false, "code": "DO_LOGIN", "text": "No hay sesion activa" }
+```
+
+---
+
+### Listar / Eliminar Precios Cargados por Usuarios (admin)
+
+| Endpoint | Método | Permiso | Descripción |
+|----------|--------|---------|-------------|
+| `/admin/precios_comunitarios/get_all` | GET | `precios.ver` | Listado paginado (contrato TableEditor) de precios con autor (`price.user_id IS NOT NULL`) |
+| `/admin/precios_comunitarios/delete_one` | DELETE | `precios.eliminar` | Elimina un precio cargado por usuario; restaura el precio anterior en `price_today`/buscador/caches si correspondía |
+
+**DELETE /admin/precios_comunitarios/delete_one** body: `{ "id": "uuid-price" }`. Solo admite precios con `user_id` asignado. Si el precio era el vigente en `price_today`, se restaura el registro más reciente de `price` del mismo producto+sucursal (o se elimina `price_today` y se saca del buscador si no hay otro).
 
 ---
 
@@ -939,7 +994,8 @@ Respuesta: `{ stat: true, data: { rows, fields_def, total, page, pageSize } }`.
 - **Autenticación**: Requerida en todos los endpoints `/admin/*` excepto `/admin/user/login`.
 - **Permisos**: Validados por el middleware `helpers/authorization.js` según el permiso declarado por ruta.
 - **Formato**: Respuestas de listado usan el contrato del `TableEditor` (`rows` + `fields_def`).
-- **Seed**: `scripts/seed_rbac.js` (idempotente) crea el rol `administrador`, 18 permisos base, las rutas del panel y el usuario por defecto `admin@admin.com`.
+- **Roles base**: `administrador` (acceso total) y `usuario` (puede publicar precios vía formulario; rol por defecto de los usuarios creados vía SSO).
+- **Seed**: `scripts/seed_rbac.js` (idempotente) crea los roles, 20 permisos base, las rutas del panel y asegura el **admin único** (`ADMIN_EMAIL`, por defecto `lucho.2012.tandil@gmail.com`): remueve el rol `administrador` de cualquier otro usuario y lo asigna al admin único en su primer login SSO (`sso.js::asegurar_rol_admin`).
 
 ### Tablas RBAC
 

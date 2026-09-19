@@ -33,7 +33,7 @@ import Spinner   from '../components/layout/Spinner.vue'
 import { AppStore } from "../stores/app"
 import { ssoLogin } from '../api/admin/userAdmin'
 import { setUserInfo } from '../utils/auth'
-import { getUniqueId, canjear_token_temporal } from '../utils/sso'
+import { getUniqueId, canjear_token_temporal, getRedirectAfterLogin, limpiarRedirectAfterLogin } from '../utils/sso'
 
 const route = useRoute()
 const router = useRouter()
@@ -59,7 +59,10 @@ async function procesar_callback() {
     if (login_req.stat) {
       setUserInfo('admin', storeApp, login_req.data.u_data, router, login_req.data.token)
       storeApp.loading = false
-      router.replace('/admin/dashboard')
+      // Volver a la ruta original (p.ej. /carga_precio) si se guardó antes del SSO
+      const destino = route.query.redirect || getRedirectAfterLogin() || '/admin/dashboard'
+      limpiarRedirectAfterLogin()
+      router.replace(destino)
       return
     }
     fallo(login_req.text || 'No se pudo iniciar sesión')

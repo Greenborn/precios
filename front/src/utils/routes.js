@@ -1,7 +1,15 @@
 
+import { getToken } from './auth'
+
 export async function routerBeforeEach( router, storeApp ){
   router.beforeEach(async (to, from) => {
-    
+
+    // Rutas que requieren sesión: sin token se redirige al login
+    // (volviendo a la página original luego de iniciar sesión)
+    if (to.meta?.requiere_sesion && !getToken()){
+      return { path: '/admin/login', query: { redirect: to.fullPath } }
+    }
+
     //Se comprueba si la ruta a la que accede existe en el arreglo de rutas, si es así
     //se debe atualizar el valor de la ruta actual
     for (let i in storeApp.rutas){

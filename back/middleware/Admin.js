@@ -15,6 +15,7 @@ router.use("/user", require("../routes/userAdmin"))
 router.use("/comercios", require("../routes/comercios"))
 router.use("/rbac", require("../routes/rbac"))
 router.use("/alias", require("../routes/alias"))
+router.use("/precios_comunitarios", require("../routes/preciosComunitarios"))
 
 var paths = [
   { path: "/user/login", public: true },
@@ -42,5 +43,7 @@ var paths = [
   { path: "/rbac/nueva_ruta", permisos: ["rutas.crear"] },
   { path: "/rbac/editar_ruta", permisos: ["rutas.editar"] },
   { path: "/rbac/eliminar_ruta", permisos: ["rutas.eliminar"] },
+  { path: "/precios_comunitarios/get_all", permisos: ["precios.ver"] },
+  { path: "/precios_comunitarios/delete_one", permisos: ["precios.eliminar"] },
   { path: "/comercios", public: true },
 ]

@@ -1,6 +1,13 @@
-// Seed idempotente de RBAC: crea rol administrador, permisos, rutas del panel y
-// un usuario admin por defecto. Ejecutado automaticamente en server.js tras las migraciones.
+// Seed idempotente de RBAC: crea roles (administrador y usuario), permisos,
+// rutas del panel y asegura el admin único del sistema. El rol administrador
+// se remueve de cualquier otro usuario que lo tuviera asignado.
+// Ejecutado automaticamente en server.js tras las migraciones.
 const bcrypt = require('bcrypt')
+
+// Email del admin único (el rol se le asigna al crear su cuenta vía SSO,
+// ver sso.js::asegurar_rol_admin, o en la primera ejecución de este seed
+// si la cuenta ya existe).
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'lucho.2012.tandil@gmail.com').toLowerCase()
 
 // Permisos base del sistema (prefijos por modulo)
 const PERMISOS = [
@@ -23,6 +30,8 @@ const PERMISOS = [
   { nombre: 'perfil.ver',          descripcion: 'Ver propio perfil' },
   { nombre: 'perfil.editar',       descripcion: 'Editar propio perfil' },
   { nombre: 'productos.editar',    descripcion: 'Administrar productos y alias de nombres' },
+  { nombre: 'precios.ver',         descripcion: 'Ver precios cargados por usuarios' },
+  { nombre: 'precios.eliminar',    descripcion: 'Eliminar precios cargados por usuarios' },
 ]
 
 // Rutas del panel de administracion. El campo "componente" debe coincidir con las
@@ -36,13 +45,8 @@ const RUTAS = [
   { path: 'roles',     componente: 'AbmRoles',      icon: 'pi-id-card',        title: 'Roles',      orden_visualizacion: 2, root: 'acceso' },
   { path: 'permisos',  componente: 'AbmPermisos',   icon: 'pi-lock',           title: 'Permisos',   orden_visualizacion: 3, root: 'acceso' },
   { path: 'rutas',     componente: 'AbmRutas',      icon: 'pi-sitemap',        title: 'Rutas',      orden_visualizacion: 4, root: 'acceso' },
+  { path: 'precios_comunitarios', componente: 'AbmPreciosComunitarios', icon: 'pi-tags', title: 'Precios Comunitarios', orden_visualizacion: 5, root: 'acceso' },
 ]
-
-const USUARIO_DEFAULT = {
-  name: 'Administrador',
-  email: process.env.ADMIN_EMAIL || 'admin@admin.com',
-  pass: process.env.ADMIN_PASS || 'admin123',
-}
 
 async function seed_rbac() {
   const knex = global.knex
@@ -52,11 +56,21 @@ async function seed_rbac() {
   }
 
   // --- Rol administrador ---
-  let rol = await knex('roles').where({ nombre: 'administrador' }).first()
-  if (!rol) {
+  let rol_admin = await knex('roles').where({ nombre: 'administrador' }).first()
+  if (!rol_admin) {
     const [rolId] = await knex('roles').insert({ nombre: 'administrador', descripcion: 'Acceso total al sistema' })
-    rol = { id: rolId }
+    rol_admin = { id: rolId }
     console.log('[seed_rbac] Rol administrador creado.')
+  }
+
+  // --- Rol usuario (pueden publicar precios; se asigna por defecto vía SSO) ---
+  let rol_usuario = await knex('roles').where({ nombre: 'usuario' }).first()
+  if (!rol_usuario) {
+    await knex('roles').insert({
+      nombre: 'usuario',
+      descripcion: 'Usuarios registrados: pueden publicar precios mediante el formulario de carga'
+    })
+    console.log('[seed_rbac] Rol usuario creado.')
   }
 
   // --- Permisos ---
@@ -67,9 +81,9 @@ async function seed_rbac() {
       permiso = { id: pid }
     }
     // asignar todos los permisos al rol administrador
-    const existe = await knex('roles_permisos').where({ rol_id: rol.id, permiso_id: permiso.id }).first()
+    const existe = await knex('roles_permisos').where({ rol_id: rol_admin.id, permiso_id: permiso.id }).first()
     if (!existe) {
-      await knex('roles_permisos').insert({ rol_id: rol.id, permiso_id: permiso.id })
+      await knex('roles_permisos').insert({ rol_id: rol_admin.id, permiso_id: permiso.id })
     }
   }
   console.log('[seed_rbac] Permisos inicializados.')
@@ -117,30 +131,39 @@ async function seed_rbac() {
   // asignar todas las rutas al rol administrador
   const todas_rutas = await knex('rutas').select('id')
   for (const r of todas_rutas) {
-    const existe = await knex('roles_rutas').where({ rol_id: rol.id, ruta_id: r.id }).first()
+    const existe = await knex('roles_rutas').where({ rol_id: rol_admin.id, ruta_id: r.id }).first()
     if (!existe) {
-      await knex('roles_rutas').insert({ rol_id: rol.id, ruta_id: r.id })
+      await knex('roles_rutas').insert({ rol_id: rol_admin.id, ruta_id: r.id })
     }
   }
   console.log('[seed_rbac] Rutas del panel inicializadas.')
 
-  // --- Usuario admin por defecto ---
-  let admin = await knex('usuarios').where({ email: USUARIO_DEFAULT.email }).first()
-  if (!admin) {
-    const hash = await bcrypt.hash(USUARIO_DEFAULT.pass, 10)
-    const [uid] = await knex('usuarios').insert({
-      name: USUARIO_DEFAULT.name,
-      email: USUARIO_DEFAULT.email,
-      pass: hash,
-    })
-    admin = { id: uid }
-    console.log(`[seed_rbac] Usuario admin creado (${USUARIO_DEFAULT.email}).`)
+  // --- Admin único ---
+  // Quitar el rol administrador a cualquier usuario que no sea el admin único
+  const otros_admins = await knex('usuarios_roles as ur')
+    .join('usuarios as u', 'ur.usuario_id', 'u.id')
+    .where('ur.rol_id', rol_admin.id)
+    .whereRaw('LOWER(u.email) != ?', [ADMIN_EMAIL])
+    .select('ur.usuario_id', 'u.email')
+  for (const otro of otros_admins) {
+    await knex('usuarios_roles')
+      .where({ usuario_id: otro.usuario_id, rol_id: rol_admin.id })
+      .del()
+    console.log(`[seed_rbac] Rol administrador removido de ${otro.email} (admin único: ${ADMIN_EMAIL}).`)
   }
 
-  const rel = await knex('usuarios_roles').where({ usuario_id: admin.id, rol_id: rol.id }).first()
-  if (!rel) {
-    await knex('usuarios_roles').insert({ usuario_id: admin.id, rol_id: rol.id })
-    console.log('[seed_rbac] Rol administrador asignado al usuario admin.')
+  // Si la cuenta del admin único ya existe (p.ej. se registró vía SSO), asignarle el rol
+  const admin = await knex('usuarios')
+    .whereRaw('LOWER(email) = ?', [ADMIN_EMAIL])
+    .first()
+  if (admin) {
+    const rel = await knex('usuarios_roles').where({ usuario_id: admin.id, rol_id: rol_admin.id }).first()
+    if (!rel) {
+      await knex('usuarios_roles').insert({ usuario_id: admin.id, rol_id: rol_admin.id })
+      console.log(`[seed_rbac] Rol administrador asignado a ${ADMIN_EMAIL}.`)
+    }
+  } else {
+    console.log(`[seed_rbac] La cuenta del admin (${ADMIN_EMAIL}) aún no existe; se le asignará el rol en su primer login SSO.`)
   }
 
   console.log('[seed_rbac] ✓ Seed RBAC completado.')

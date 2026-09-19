@@ -55,3 +55,7 @@ export function get_productos( category_id ) {
 export function cargar_nuevo_precio( data ) {
   return request({ url: '/publico/productos/cargar_nuevo_precio', method: 'put',  data:data })
 }
+
+export function cargar_precios_formulario( data ) {
+  return request({ url: '/publico/productos/cargar_precios_formulario', method: 'put', data:data })
+}

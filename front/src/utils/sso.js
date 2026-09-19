@@ -33,6 +33,22 @@ export function limpiar_sso() {
   localStorage.removeItem(SSO_USER_KEY)
 }
 
+// Redirección post-login: como el flujo SSO pierde la query al volver del
+// SSO central, el destino se persiste en localStorage (ver LoginAdmin/LoginRedirect)
+const AFTER_LOGIN_KEY = 'redirect_after_login'
+
+export function setRedirectAfterLogin(path) {
+  if (path) localStorage.setItem(AFTER_LOGIN_KEY, path)
+}
+
+export function getRedirectAfterLogin() {
+  return localStorage.getItem(AFTER_LOGIN_KEY)
+}
+
+export function limpiarRedirectAfterLogin() {
+  localStorage.removeItem(AFTER_LOGIN_KEY)
+}
+
 // Redirige al SSO central para iniciar sesión con Google
 export function iniciar_sso() {
   const params = new URLSearchParams({

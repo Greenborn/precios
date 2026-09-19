@@ -15,7 +15,10 @@ function normalizar_item(ph) {
         confiabilidad: ph.confiabilidad,
         notas: ph.notas,
         url: ph.url,
-        price_id: ph.price_id
+        price_id: ph.price_id,
+        user_id: ph.user_id || null,
+        user_nombre: ph.user_nombre || null,
+        user_apellido: ph.user_apellido || null
     }
 }
 

@@ -118,6 +118,16 @@
                                                 </div>
                                             </div>
 
+                                            <div class="row"
+                                                v-if="resultado?.user_nombre || resultado?.user_apellido">
+                                                <div class="col">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-person-check me-1"></i>Cargado por:
+                                                        <b>{{ [resultado?.user_nombre, resultado?.user_apellido].filter(Boolean).join(' ') }}</b>
+                                                    </small>
+                                                </div>
+                                            </div>
+
                                             <div class="row">
                                                 <div class="col cnt-negocios">
                                                     <div v-if="resultado?.tipo != 'ALQUILER'">

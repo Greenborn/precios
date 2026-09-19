@@ -54,6 +54,7 @@ async function cargar_usuario(usuario_id) {
   return {
     id: usuario.id,
     name: usuario.name,
+    apellido: usuario.apellido || null,
     email: usuario.email,
     roles: roles.map(r => r.nombre),
     permisos: permisos.map(p => p.nombre),

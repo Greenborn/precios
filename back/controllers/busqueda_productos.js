@@ -37,6 +37,9 @@ exports.inicializa_buscador = async function() {
             'date_time':  productosHoy[i].date_time,
             'time':       productosHoy[i].time,
             'url':        productosHoy[i].url,
+            'user_id':        productosHoy[i].user_id || null,
+            'user_nombre':    productosHoy[i].user_nombre || null,
+            'user_apellido':  productosHoy[i].user_apellido || null,
         }
         let o_k = Object.keys(props)
         for (let j = 0; j < o_k.length; j++) {
@@ -95,13 +98,16 @@ exports.agregar_a_buscador = function(producto) {
     let aux = {
         'dsc':        props,
         'name':       nombre,  // Guardamos el nombre original
-        'nameLower':  nombreLower,  // Guardamos versión en minúsculas para búsqueda
+        'nameLower':  nombreLower,  // Para indexación case-insensitive
         'product_id': producto.product_id,
         'price':      producto.price,
         'branch_id':  producto.branch_id,
         'date_time':  producto.date_time,
         'time':       producto.time,
         'url':        producto.url || null,
+        'user_id':        producto.user_id || null,
+        'user_nombre':    producto.user_nombre || null,
+        'user_apellido':  producto.user_apellido || null,
     }
 
     // Agregar a cada letra correspondiente
@@ -157,7 +163,10 @@ exports.busqueda = async function( termino, limit = -1 ) {
                             'product_id':e_actual.product_id,
                             'date_time':e_actual.date_time,
                             'time':e_actual.time,
-                            'url':e_actual.url
+                            'url':e_actual.url,
+                            'user_id':e_actual.user_id || null,
+                            'user_nombre':e_actual.user_nombre || null,
+                            'user_apellido':e_actual.user_apellido || null
                         })
                         encontrados.push(e_actual)
                         break

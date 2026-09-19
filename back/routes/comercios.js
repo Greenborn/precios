@@ -1,7 +1,6 @@
 const express = require('express')
 var router = express.Router()
 module.exports = router
-const { regenerar_diccionarios } = require('../server')
 
 router.post('/', async function (req, res) {
     const KEY = req.body?.key
@@ -67,6 +66,8 @@ router.post('/', async function (req, res) {
         }
 
         try {
+            // require lazy: evita dependencia circular con server.js al cargar el router
+            const { regenerar_diccionarios } = require('../server')
             await regenerar_diccionarios()
         } catch (err) {
             console.error('[comercios] Error al regenerar diccionarios:', err)

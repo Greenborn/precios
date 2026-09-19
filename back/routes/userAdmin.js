@@ -7,9 +7,10 @@ const { firmar_token, cargar_usuario } = require('../helpers/auth')
 const sso = require('../sso')
 
 const FIELDS_DEF_USUARIOS = [
-  { field: 'id',     headerName: 'ID',     sortable: true },
-  { field: 'name',   headerName: 'Nombre', sortable: true },
-  { field: 'email',  headerName: 'Email',  sortable: true },
+  { field: 'id',       headerName: 'ID',      sortable: true },
+  { field: 'name',     headerName: 'Nombre',  sortable: true },
+  { field: 'apellido', headerName: 'Apellido', sortable: true },
+  { field: 'email',    headerName: 'Email',   sortable: true },
 ]
 
 function responder_ok(res, data) {
@@ -30,6 +31,7 @@ router.get('/info', async function (req, res) {
   responder_ok(res, {
     id: usuario.id,
     name: usuario.name,
+    apellido: usuario.apellido || null,
     email: usuario.email,
     rutas: usuario.rutas || [],
   })
@@ -55,6 +57,7 @@ router.post('/login', async function (req, res) {
       u_data: {
         id: u_data.id,
         name: u_data.name,
+        apellido: u_data.apellido || null,
         email: u_data.email,
         rutas: u_data.rutas,
       },
@@ -84,6 +87,9 @@ router.post('/sso_login', async function (req, res) {
     const usuario = await sso.syncSsoUser(sso_user)
     if (!usuario) return responder_err(res, 'No se pudo obtener/crear el usuario', 'DO_LOGIN')
 
+    // Asigna el rol administrador si corresponde al admin único del sistema
+    await sso.asegurar_rol_admin(usuario)
+
     const u_data = await cargar_usuario(usuario.id)
     if (!u_data) return responder_err(res, 'Usuario no encontrado', 'DO_LOGIN')
 
@@ -94,6 +100,7 @@ router.post('/sso_login', async function (req, res) {
       u_data: {
         id: u_data.id,
         name: u_data.name,
+        apellido: u_data.apellido || null,
         email: u_data.email,
         rutas: u_data.rutas,
       },
@@ -127,12 +134,13 @@ router.put('/guardar_config', async function (req, res) {
   const usuario = req.session && req.session.u_data ? req.session.u_data : null
   if (!usuario) return responder_err(res, 'No hay sesion activa', 'DO_LOGIN')
 
-  const { id, name, email, pass } = req.body || {}
+  const { id, name, apellido, email, pass } = req.body || {}
 
   if (id && Number(id) !== usuario.id) return responder_err(res, 'No autorizado')
 
   const actualizar = {}
   if (name) actualizar.name = name
+  if (apellido !== undefined) actualizar.apellido = apellido
   if (email) actualizar.email = email
   if (pass && pass !== '********') {
     actualizar.pass = await bcrypt.hash(pass, 10)
@@ -167,10 +175,14 @@ router.get('/get_all', async function (req, res) {
 
   if (search) {
     query.where(function () {
-      this.where('name', 'like', `%${search}%`).orWhere('email', 'like', `%${search}%`)
+      this.where('name', 'like', `%${search}%`)
+        .orWhere('apellido', 'like', `%${search}%`)
+        .orWhere('email', 'like', `%${search}%`)
     })
     countQuery.where(function () {
-      this.where('name', 'like', `%${search}%`).orWhere('email', 'like', `%${search}%`)
+      this.where('name', 'like', `%${search}%`)
+        .orWhere('apellido', 'like', `%${search}%`)
+        .orWhere('email', 'like', `%${search}%`)
     })
   }
 
@@ -178,13 +190,13 @@ router.get('/get_all', async function (req, res) {
   let filters = {}
   try { filters = req.query.filters ? JSON.parse(req.query.filters) : {} } catch (e) { filters = {} }
   for (const [field, value] of Object.entries(filters)) {
-    if (value && ['id', 'name', 'email'].includes(field)) {
+    if (value && ['id', 'name', 'apellido', 'email'].includes(field)) {
       query.where(field, 'like', `%${value}%`)
       countQuery.where(field, 'like', `%${value}%`)
     }
   }
 
-  const orderField = ['id', 'name', 'email'].includes(sortField) ? sortField : 'id'
+  const orderField = ['id', 'name', 'apellido', 'email'].includes(sortField) ? sortField : 'id'
   const total = parseInt((await countQuery.count('* as c'))[0].c)
   const offset = (page - 1) * pageSize
   const rows = await query.orderBy(orderField, sortOrder === 'desc' ? 'desc' : 'asc').offset(offset).limit(pageSize)
@@ -201,7 +213,7 @@ router.get('/get_all', async function (req, res) {
 
 // POST /add_one - crear usuario
 router.post('/add_one', async function (req, res) {
-  const { name, email, pass, roles } = req.body || {}
+  const { name, apellido, email, pass, roles } = req.body || {}
   if (!name || !email || !pass) return responder_err(res, 'Nombre, email y contraseña son requeridos')
 
   try {
@@ -209,7 +221,7 @@ router.post('/add_one', async function (req, res) {
     if (existente) return responder_err(res, 'El email ya está en uso')
 
     const hash = await bcrypt.hash(pass, 10)
-    const [id] = await global.knex('usuarios').insert({ name, email, pass: hash })
+    const [id] = await global.knex('usuarios').insert({ name, apellido: apellido || null, email, pass: hash })
 
     if (roles && roles.length > 0) {
       const inserts = roles.map((rolId) => ({ usuario_id: id, rol_id: rolId }))
@@ -225,7 +237,7 @@ router.post('/add_one', async function (req, res) {
 
 // PUT /put_one - actualizar usuario
 router.put('/put_one', async function (req, res) {
-  const { id, name, email, pass, roles } = req.body || {}
+  const { id, name, apellido, email, pass, roles } = req.body || {}
   if (!id) return responder_err(res, 'ID requerido')
 
   try {
@@ -239,6 +251,7 @@ router.put('/put_one', async function (req, res) {
 
     const actualizar = {}
     if (name) actualizar.name = name
+    if (apellido !== undefined) actualizar.apellido = apellido
     if (email) actualizar.email = email
     if (pass && pass !== '********') actualizar.pass = await bcrypt.hash(pass, 10)
 
