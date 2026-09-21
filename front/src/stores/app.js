@@ -8,7 +8,7 @@ export const MAX_MODALS_LVLS = 20
 export const MODALS_INIT = { activo: false, id: 0, code: 0,  componente: null, parametros: {}, titulo: '', refresh:()=>{}, dismiss:()=>{}, after_hide:()=>{}, config_modal:{} }
 
 export const AppStore = defineStore('app',() =>  {
-  const userInfo       = ref({})
+  const userInfo       = ref(null)
   const rutas          = ref([])
   const tipoUsuario    = ref('')
   const opcionesMenu   = ref([])

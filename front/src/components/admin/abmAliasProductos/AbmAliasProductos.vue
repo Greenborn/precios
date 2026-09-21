@@ -8,7 +8,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed } from 'vue'
   import { TableEditor as VteTableEditor } from 'vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { get_all, get_productos, add_one, put_one, delete_one } from '@/api/admin/aliasProductos'
@@ -18,7 +18,6 @@
 
   const table_ref = ref()
   const seleccionado = ref(null)
-  const productos = ref([])
 
   const nombre_elemento = { singular: 'Alias de producto', plural: 'Alias de productos', genero: 'M' }
 
@@ -26,12 +25,24 @@
     list: buildVteList(get_all),
   }
 
+  // Busqueda remota de productos para el selector con filtro del formulario
+  async function buscar_productos(q) {
+    const res = await get_productos({ search: q, limit: 20 })
+    return (res && res.stat && res.data?.rows) || []
+  }
+
   // Campos del formulario de alta/edicion (product_name solo informativo en la tabla)
   function campos_form() {
     return [
       { field: 'alias', headerName: 'Alias', required: true, form_min_max: [1, 512] },
-      { field: 'product_id', headerName: 'Producto', form_type: 'select', required: true,
-        rel_table: { rows: productos.value, descr_field: 'name', id_field: 'id' } },
+      { field: 'product_id', headerName: 'Producto', form_type: 'autocomplete', required: true,
+        display_field: 'product_name',
+        autocomplete: {
+          search: buscar_productos,
+          label: 'name',
+          optionValue: 'id',
+          placeholder: 'Buscar producto por nombre...',
+        } },
     ]
   }
 
@@ -55,15 +66,6 @@
   function onRowSelected(sel) {
     seleccionado.value = sel
   }
-
-  onMounted(async () => {
-    storeApp.loading = true
-    const res = await get_productos({ limit: 5000 })
-    storeApp.loading = false
-    if (res && res.stat) {
-      productos.value = res.data?.rows || []
-    }
-  })
 </script>
 
 <style scoped>

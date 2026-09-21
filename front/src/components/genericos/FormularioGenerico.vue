@@ -44,7 +44,18 @@
              :optionValue="parametros.selectData[campo.field].optionValue" 
              :placeholder="parametros.selectData[campo.field].placeholder" />
 
-          <div 
+          <AutoComplete
+            v-if="campo.form_type == 'autocomplete' && campo.autocomplete"
+            :modelValue="modelo[campo.field]"
+            :displayValue="campo.display_field ? (modelo[campo.display_field] ?? '') : ''"
+            :search="campo.autocomplete.search"
+            :optionLabel="campo.autocomplete.label"
+            :optionValue="campo.autocomplete.optionValue"
+            :placeholder="campo.autocomplete.placeholder || campo.headerName"
+            :disabled="campo.editable === false"
+            @update:modelValue="v => modelo[campo.field] = v" />
+
+          <div
             v-if="campo.form_type == 'radiobutton'"
             v-for="(campo_sub_opts) in parametros.selectData[campo.field].data" :key="campo_sub_opts"
             class="field-radiobutton">
