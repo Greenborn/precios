@@ -1,6 +1,8 @@
 // ABM de alias_productos (alias -> producto). Listado server-side con contrato
 // TableEditor, alta/edicion/borrado y busqueda de productos para el selector.
-// Tras cada mutacion se regeneran los diccionarios en memoria.
+// La tabla no tiene id: PK compuesta (alias, product_id); se usa `alias` como
+// identificador de fila (un alias apunta a un unico producto). Tras cada
+// mutacion se regeneran los diccionarios en memoria.
 const express = require('express')
 var router = express.Router()
 module.exports = router
@@ -14,8 +16,7 @@ function responder_err(res, text) {
 }
 
 const FIELDS_DEF_ALIAS_PRODUCTOS = [
-  { field: 'id',           headerName: 'ID',         sortable: true },
-  { field: 'alias',        headerName: 'Alias',      sortable: true },
+  { field: 'id',           headerName: 'Alias',      sortable: true },
   { field: 'product_id',   headerName: 'ID Producto' },
   { field: 'product_name', headerName: 'Producto',   sortable: true },
 ]
@@ -26,13 +27,13 @@ function limpiar_alias(texto) {
     .replace(/[\r\n\t]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 512)
+    .slice(0, 1024)
 }
 
 function armar_query() {
   return global.knex('alias_productos')
     .select(
-      'alias_productos.id as id',
+      'alias_productos.alias as id',
       'alias_productos.alias as alias',
       'alias_productos.product_id as product_id',
       'products.name as product_name'
@@ -61,7 +62,7 @@ router.get('/get_all', async function (req, res) {
   }
 
   const SORT_COLUMNS = {
-    id: 'alias_productos.id',
+    id: 'alias_productos.alias',
     alias: 'alias_productos.alias',
     product_name: 'products.name',
   }
@@ -98,20 +99,20 @@ router.get('/productos', async function (req, res) {
   }
 })
 
-// Valida alias + product_id comunes a alta y edicion (excluir_id en edicion)
-async function validar_payload(body, excluir_id) {
+// Valida alias + product_id comunes a alta y edicion (alias_actual en edicion)
+async function validar_payload(body, alias_actual) {
   const alias = limpiar_alias(body?.alias)
-  const product_id = parseInt(body?.product_id)
+  const product_id = String(body?.product_id ?? '').trim()
 
   if (!alias) return { error: 'El alias es obligatorio' }
-  if (!product_id || product_id < 1) return { error: 'Debe seleccionar un producto' }
+  if (!product_id) return { error: 'Debe seleccionar un producto' }
 
   const producto = await global.knex('products').where({ id: product_id }).first()
   if (!producto) return { error: 'El producto indicado no existe' }
 
   let q = global.knex('alias_productos')
     .whereRaw('LOWER(alias) = ?', [alias.toLowerCase()])
-  if (excluir_id) q = q.whereNot({ id: excluir_id })
+  if (alias_actual) q = q.whereNot({ alias: alias_actual })
   const duplicado = await q.first()
   if (duplicado) return { error: 'Ya existe un alias igual (los alias no distinguen mayúsculas)' }
 
@@ -124,7 +125,7 @@ router.post('/add_one', async function (req, res) {
     const validacion = await validar_payload(req.body, null)
     if (validacion.error) return responder_err(res, validacion.error)
 
-    const [id] = await global.knex('alias_productos').insert({
+    await global.knex('alias_productos').insert({
       alias: validacion.alias,
       product_id: validacion.product_id,
     })
@@ -132,26 +133,26 @@ router.post('/add_one', async function (req, res) {
     const { regenerar_diccionarios } = require('../server')
     await regenerar_diccionarios()
 
-    responder_ok(res, { id, message: 'Alias creado correctamente' })
+    responder_ok(res, { message: 'Alias creado correctamente' })
   } catch (error) {
     console.log('[alias_productos] Error en add_one:', error)
     responder_err(res, 'Error al crear el alias')
   }
 })
 
-// PUT /put_one - edita un alias { id, alias, product_id }
+// PUT /put_one - edita un alias { id: alias actual, alias, product_id }
 router.put('/put_one', async function (req, res) {
-  const { id } = req.body || {}
-  if (!id) return responder_err(res, 'ID requerido')
+  const alias_actual = String(req.body?.id ?? req.body?.alias ?? '').trim()
+  if (!alias_actual) return responder_err(res, 'Alias actual requerido')
 
   try {
-    const existente = await global.knex('alias_productos').where({ id }).first()
+    const existente = await global.knex('alias_productos').where({ alias: alias_actual }).first()
     if (!existente) return responder_err(res, 'Alias no encontrado')
 
-    const validacion = await validar_payload(req.body, id)
+    const validacion = await validar_payload(req.body, alias_actual)
     if (validacion.error) return responder_err(res, validacion.error)
 
-    await global.knex('alias_productos').where({ id }).update({
+    await global.knex('alias_productos').where({ alias: alias_actual }).update({
       alias: validacion.alias,
       product_id: validacion.product_id,
     })
@@ -166,13 +167,13 @@ router.put('/put_one', async function (req, res) {
   }
 })
 
-// DELETE /delete_one - elimina un alias { id }
+// DELETE /delete_one - elimina un alias { id: alias }
 router.delete('/delete_one', async function (req, res) {
-  const { id } = req.body || {}
-  if (!id) return responder_err(res, 'ID requerido')
+  const alias = String(req.body?.id ?? '').trim()
+  if (!alias) return responder_err(res, 'Alias requerido')
 
   try {
-    const cant = await global.knex('alias_productos').where({ id }).del()
+    const cant = await global.knex('alias_productos').where({ alias }).del()
     if (cant === 0) return responder_err(res, 'Alias no encontrado')
 
     const { regenerar_diccionarios } = require('../server')
