@@ -1,7 +1,7 @@
 import Cookies from 'js-cookie'
 import { markRaw } from 'vue'
 import Layout from '../components/layout/Layout.vue'
-import { routes as rutas_iniciales } from "../router";
+import { routes as rutas_iniciales, router } from "../router";
 
 import { info as infoAdmins, logout as logoutAdmins } from '../api/admin/userAdmin'
 import { datos_logout_sso, limpiar_sso } from '../utils/sso'
@@ -35,6 +35,10 @@ async function do_logout( storeApp, router ){
   } else {
     console.log('No se pudo cerrar sessión')
   }
+}
+
+export function logout( storeApp ){
+  return do_logout( storeApp, router )
 }
 
 export function setUserInfo( tipo_usuario, storeApp, userData, router, token = null ) {

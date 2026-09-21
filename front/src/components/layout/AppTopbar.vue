@@ -2,13 +2,20 @@
   <div class="container-topbar">
     <Button icon="pi-bars" class="btn-topbar-toggle" @click="storeApp.toggle_sidebar" />
     <h2 class="m-0 title">{{storeApp.ruta_actual.title}}</h2>
+
+    <Button v-if="storeApp.userInfo" icon="pi-power-off" class="btn-topbar-logout ms-auto" title="Cerrar sesión" @click="cerrar_sesion" />
   </div>
 </template>
 
 <script setup >
   import { AppStore } from "../../stores/app"
+  import { logout } from "../../utils/auth"
 
   const storeApp = AppStore()
+
+  function cerrar_sesion(){
+    logout( storeApp )
+  }
 </script>
 
 <style lang="scss" scoped>
@@ -45,6 +52,21 @@
   background-color: #f3f4f6;
   border-color: #9ca3af;
   color: #111827;
+}
+
+.btn.btn-topbar-logout {
+  background-color: #fff;
+  border-color: #d1d5db;
+  color: #dc2626;
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+}
+
+.btn.btn-topbar-logout:hover,
+.btn.btn-topbar-logout:focus {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
 }
 
 @media (max-width: 576px) {
