@@ -41,9 +41,12 @@
           <li class="nav-item ms-lg-2" v-if="!isLogged">
             <button class="btn btn-cuenta" type="button" @click="irIngresar">Ingresar</button>
           </li>
-          <li class="nav-item ms-lg-2" v-else>
+          <li class="nav-item ms-lg-2 d-flex align-items-center gap-2" v-else>
             <button class="btn btn-cuenta" type="button" @click="irDashboard">
               <i class="bi bi-person-circle me-1"></i>{{ storeApp.userInfo?.name || 'Mi cuenta' }}
+            </button>
+            <button class="btn btn-logout" type="button" title="Cerrar sesión" aria-label="Cerrar sesión" @click="cerrar_sesion">
+              <i class="bi bi-box-arrow-right"></i>
             </button>
           </li>
         </ul>
@@ -72,7 +75,7 @@ import { ref, onMounted, watchEffect } from 'vue'
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
 import { router } from "../../router"
-import { getToken, getUserInfo, setUserInfo } from "../../utils/auth"
+import { getToken, getUserInfo, setUserInfo, logout } from "../../utils/auth"
 
 const emit  = defineEmits(['buscar_evnt', 'agregar_evnt', 'filtrar_evnt'])
 const storeApp = AppStore()
@@ -122,6 +125,10 @@ async function irDashboard(){
   } else {
     router.push('/admin/login')
   }
+}
+
+function cerrar_sesion(){
+  logout(storeApp)
 }
 
 function filtrar(){
@@ -192,6 +199,23 @@ onMounted(()=>{
 .btn-cuenta:focus {
   background-color: #1aa87f;
   border-color: #1aa87f;
+  color: #fff;
+}
+
+.btn-logout {
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.45rem 0.6rem;
+}
+
+.btn-logout:hover,
+.btn-logout:focus {
+  background-color: rgba(220, 53, 69, 0.85);
+  border-color: #dc3545;
   color: #fff;
 }
 

@@ -26,7 +26,8 @@ export function setToken(token) {
 }
 
 async function do_logout( storeApp, router ){
-  let logout_rpt = await tiposUsuario[ storeApp.tipoUsuario ].api_logout()
+  const tipo = tiposUsuario[ storeApp.tipoUsuario ] ? storeApp.tipoUsuario : 'admin'
+  let logout_rpt = await tiposUsuario[ tipo ].api_logout()
 
   if (logout_rpt) {
     limpiar_sso()

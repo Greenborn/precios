@@ -8,6 +8,7 @@ import AbmRoles from './admin/acceso/abmRoles/AbmRoles.vue'
 import AbmPermisos from './admin/acceso/abmPermisos/AbmPermisos.vue'
 import AbmRutas from './admin/acceso/abmRutas/AbmRutas.vue'
 import AbmPreciosComunitarios from './admin/abmPrecios/AbmPreciosComunitarios.vue'
+import AbmAliasProductos from './admin/abmAliasProductos/AbmAliasProductos.vue'
 import ConfigCuenta from './admin/cuenta/ConfigCuenta.vue'
 
 export const referencias_componentes = {
@@ -17,5 +18,6 @@ export const referencias_componentes = {
   AbmPermisos,
   AbmRutas,
   AbmPreciosComunitarios,
+  AbmAliasProductos,
   ConfigCuenta,
 }

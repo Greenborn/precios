@@ -34,8 +34,9 @@
           </div>
 
           <Select 
-             v-if="campo.form_type == 'select' && parametros.selectData[campo.field] !== undefined"
+             v-if = "campo.form_type == 'select' && parametros.selectData[campo.field] !== undefined"
              class="w-100"
+             filter
              :disabled="campo.editable === false"
              v-model="modelo[campo.field]" 
              :options="parametros.selectData[campo.field].data" 

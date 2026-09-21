@@ -30,6 +30,10 @@ const PERMISOS = [
   { nombre: 'perfil.ver',          descripcion: 'Ver propio perfil' },
   { nombre: 'perfil.editar',       descripcion: 'Editar propio perfil' },
   { nombre: 'productos.editar',    descripcion: 'Administrar productos y alias de nombres' },
+  { nombre: 'alias.ver',           descripcion: 'Ver alias de productos' },
+  { nombre: 'alias.crear',         descripcion: 'Crear alias de productos' },
+  { nombre: 'alias.editar',        descripcion: 'Editar alias de productos' },
+  { nombre: 'alias.eliminar',      descripcion: 'Eliminar alias de productos' },
   { nombre: 'precios.ver',         descripcion: 'Ver precios cargados por usuarios' },
   { nombre: 'precios.eliminar',    descripcion: 'Eliminar precios cargados por usuarios' },
 ]
@@ -46,6 +50,7 @@ const RUTAS = [
   { path: 'permisos',  componente: 'AbmPermisos',   icon: 'pi-lock',           title: 'Permisos',   orden_visualizacion: 3, root: 'acceso' },
   { path: 'rutas',     componente: 'AbmRutas',      icon: 'pi-sitemap',        title: 'Rutas',      orden_visualizacion: 4, root: 'acceso' },
   { path: 'precios_comunitarios', componente: 'AbmPreciosComunitarios', icon: 'pi-tags', title: 'Precios Comunitarios', orden_visualizacion: 5, root: 'acceso' },
+  { path: 'alias_productos', componente: 'AbmAliasProductos', icon: 'pi-address-book', title: 'Alias de Productos', orden_visualizacion: 4 },
 ]
 
 async function seed_rbac() {
