@@ -1,6 +1,7 @@
 <template>
   <VteTableEditor
     ref="table_ref"
+    id="alias_productos"
     :api="vteApi"
     :config="vteConfig"
     @rowSelected="onRowSelected"
@@ -58,6 +59,7 @@
 
   const vteConfig = computed(() => ({
     lazy: true,
+    showFilterRow: true,
     selectionMode: 'single',
     elementName: toVteElementName(nombre_elemento),
     buttons: { toolbar: crud.toolbar },

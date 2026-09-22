@@ -1,6 +1,7 @@
 <template>
   <VteTableEditor
     ref="table_ref"
+    id="rutas"
     :api="vteApi"
     :config="vteConfig"
     @loaded="abm_listo = true"

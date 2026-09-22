@@ -1,6 +1,7 @@
 <template>
   <VteTableEditor
     ref="table_ref"
+    id="usuarios"
     :api="vteApi"
     :config="vteConfig"
     @rowSelected="onRowSelected"

@@ -13,6 +13,7 @@
 
   <VteTableEditor
     ref="table_ref"
+    id="roles"
     :api="vteApi"
     :config="vteConfig"
     @loaded="abm_listo = true"

@@ -1,46 +1,96 @@
 <template>
-  <div class="container-fluid">
-    <div class="row">
-      <div class="col-auto p-0"><AppMenu></AppMenu></div>
-      <div class="col component-container pt-0" :class="{ 'sidebar_minimized': !storeApp.sidebarVisible }" @click="deexpand_options_menu">
-        <AppTopbar></AppTopbar>
-        
-        <router-view v-if="(storeApp.sidebarVisible && innerWidth() < 576) || innerWidth() > 576"></router-view>
-      </div>
-    </div>
+  <div>
+    <AppTopbar />
 
-    <div class="row" v-if="(!storeApp.sidebarVisible && innerWidth() < 576) || innerWidth() < 576" @click="deexpand_options_menu">
-      <router-view></router-view>
-    </div>
+    <SideMenu
+      :items="menuItems"
+      :visible="storeApp.sidebarVisible"
+      title="Menú"
+      @close="storeApp.sidebarVisible = false">
+      <template #footer>v{{ version }}</template>
+    </SideMenu>
+
+    <main class="app-main" :class="{ 'app-main--with-sidebar': storeApp.sidebarVisible }">
+      <div class="app-content">
+        <router-view />
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup>
-import AppTopbar from './AppTopbar.vue'
-import AppMenu   from './AppMenu.vue'
+  import { computed, onMounted, onBeforeUnmount } from 'vue'
+  import { provide } from 'vue'
+  import { version } from '../../../package.json'
+  import SideMenu, { HAS_PERMISSION_KEY } from '@greenborn/vue-side-menu'
+  import AppTopbar from './AppTopbar.vue'
+  import { AppStore } from "../../stores/app"
+  import { piToBi } from '@/utils/icons'
+  import { logout } from '@/utils/auth'
 
-import { AppStore } from "../../stores/app";
+  const storeApp = AppStore()
 
-const storeApp = AppStore()
+  provide(HAS_PERMISSION_KEY, () => true)
 
-function innerWidth(){
-  return window.innerWidth
-}
+  const menuItems = computed(() => {
+    let items = []
+    for (let item of storeApp.opcionesMenu || []) {
+      let icon = piToBi(item.icon)
 
-function deexpand_options_menu(){
-  for (let key in storeApp.opcionesMenu){
-    storeApp.opcionesMenu[key].expanded = false
+      if (Array.isArray(item.sub_items) && item.sub_items.length > 0) {
+        items.push({
+          label: item.title,
+          icon,
+          children: item.sub_items.map((sub) => ({
+            label: sub.title,
+            to: sub.path,
+            icon: piToBi(sub.icon)
+          }))
+        })
+      } else if (item.component) {
+        items.push({ label: item.title, to: item.path, icon })
+      } else if (typeof item.onClick === 'function') {
+        items.push({ label: item.title, icon, action: () => item.onClick(item) })
+      }
+    }
+    return items
+  })
+
+  function handleResize(){
+    if (window.innerWidth >= 768) {
+      storeApp.sidebarVisible = true
+    }
   }
-}
+
+  onMounted(() => {
+    storeApp.sidebarVisible = window.innerWidth >= 768
+    window.addEventListener('resize', handleResize)
+  })
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize)
+  })
 </script>
 
-<style lang="scss" scoped>
-
-.component-container{
-  max-width: calc( 100vw - 20rem);
+<style scoped>
+.app-main {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: 56px;
+  overflow: hidden;
 }
 
-.sidebar_minimized{
-  max-width: calc( 100vw - 5rem);
+.app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  .app-main--with-sidebar {
+    margin-left: 250px;
+  }
 }
 </style>

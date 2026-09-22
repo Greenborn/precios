@@ -1,22 +1,32 @@
-@use "./_variables" as variables;
-@use "./sass/_layout" as *;
 @use "./_overrides" as *;
 
-html{
+html {
   font-size: 1rem;
 }
 
-body{
-  font-family: 'Open Sans', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+html, body, #app {
+  height: 100%;
+  margin: 0;
 }
 
+body {
+  font-family: 'Open Sans', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f8f9fa;
+}
+
+#app {
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ---------- Login ---------- */
 .login-container {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 20% 20%, rgba(32, 201, 151, 0.12), transparent 45%),
-    linear-gradient(160deg, #2d3a4b 0%, #1e2a38 100%);
+    radial-gradient(circle at 20% 20%, rgba(25, 135, 84, 0.12), transparent 45%),
+    linear-gradient(160deg, #212529 0%, #1a1e21 100%);
   color: #374151;
 
   .form-cont{
@@ -35,26 +45,25 @@ body{
   height: auto;
 }
 
-#app{
-  width: 100%;
-
-  overflow-x: hidden;
-  min-height: 100vh;
-}
-
+/* ---------- Panel admin ---------- */
 .nav-item {
   a {
-    color:#cfcfcf;
+    color: #cfcfcf;
     font-weight: bold;
   }
 
   .active{
-    color:#FFF;
+    color: #fff;
     font-weight: bolder;
   }
-  
 }
 
 .bg-primary {
-  background-color: rgb(0, 38, 94) !important;
+  background-color: #212529 !important;
+}
+
+/* ---------- Tablas: nunca exceden la pantalla ---------- */
+.app-content > .te-wrapper {
+  height: 100%;
+  min-height: 0;
 }

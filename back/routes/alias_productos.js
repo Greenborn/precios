@@ -49,17 +49,36 @@ router.get('/get_all', async function (req, res) {
   const sortField = req.query.sortField || 'id'
   const sortOrder = req.query.sortOrder || 'asc'
 
-  const query = armar_query()
-  const countQuery = global.knex('alias_productos')
+  // Filtros por columna: { campo: "valor" } (JSON string desde la libreria)
+  let filters = {}
+  try { filters = req.query.filters ? JSON.parse(req.query.filters) : {} } catch (e) { filters = {} }
 
-  if (search) {
-    const like = `%${search}%`
-    query.where(function () {
-      this.where('alias_productos.alias', 'like', like)
-        .orWhere('products.name', 'like', like)
-    })
-    countQuery.where('alias_productos.alias', 'like', like)
+  // Whitelist campo -> [columna real, modo]
+  const FILTER_COLUMNS = {
+    id: ['alias_productos.alias', 'like'],
+    alias: ['alias_productos.alias', 'like'],
+    product_id: ['alias_productos.product_id', 'eq'],
+    product_name: ['products.name', 'like'],
   }
+
+  function aplicar_filtros(q) {
+    for (const [field, value] of Object.entries(filters)) {
+      const def = FILTER_COLUMNS[field]
+      if (!def || value === undefined || value === null || value === '') continue
+      q.where(def[0], def[1] === 'eq' ? '=' : 'like', def[1] === 'eq' ? value : `%${value}%`)
+    }
+    if (search) {
+      const like = `%${search}%`
+      q.where(function () {
+        this.where('alias_productos.alias', 'like', like)
+          .orWhere('products.name', 'like', like)
+      })
+    }
+    return q
+  }
+
+  const query = aplicar_filtros(armar_query())
+  const countQuery = aplicar_filtros(armar_query()).clearSelect().clearOrder()
 
   const SORT_COLUMNS = {
     id: 'alias_productos.alias',
