@@ -134,20 +134,16 @@ async function fusionar_producto(trx, duplicado, canonico, termino) {
   console.log(`   ⇄ fusionado "${duplicado.name}" (${duplicado.id}) → "${canonico.name}" (${canonico.id})`)
 }
 
-// Garantiza que el termino inicial quede como alias del producto canonico
+// Garantiza que el termino inicial quede como alias del producto canonico.
+// La unicidad es por el par (alias, product_id): si el alias ya apunta a otros
+// productos, se agrega la relacion con el canonico sin tocar las demas.
 async function asegurar_alias(trx, alias, canonico) {
   const existe = await trx('alias_productos')
     .where({ alias: alias, product_id: canonico.id }).first()
   if (existe)
     return
-  const ya_apuntado = await trx('alias_productos').where('alias', alias).first()
-  if (ya_apuntado) {
-    await trx('alias_productos').where('alias', alias).update({ product_id: canonico.id })
-    stats.alias_reapuntados++
-  } else {
-    await trx('alias_productos').insert({ alias: alias, product_id: canonico.id })
-    stats.aliases_creados++
-  }
+  await trx('alias_productos').insert({ alias: alias, product_id: canonico.id })
+  stats.aliases_creados++
 }
 
 // Mantiene el indice en memoria por nombre normalizado consistente con lo

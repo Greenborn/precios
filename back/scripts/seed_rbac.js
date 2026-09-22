@@ -36,6 +36,10 @@ const PERMISOS = [
   { nombre: 'alias.eliminar',      descripcion: 'Eliminar alias de productos' },
   { nombre: 'precios.ver',         descripcion: 'Ver precios cargados por usuarios' },
   { nombre: 'precios.eliminar',    descripcion: 'Eliminar precios cargados por usuarios' },
+  { nombre: 'categorias.ver',      descripcion: 'Ver categorías de productos' },
+  { nombre: 'categorias.crear',    descripcion: 'Crear categorías de productos' },
+  { nombre: 'categorias.editar',   descripcion: 'Editar categorías de productos y su relación con productos' },
+  { nombre: 'categorias.eliminar', descripcion: 'Eliminar categorías de productos' },
 ]
 
 // Rutas del panel de administracion. El campo "componente" debe coincidir con las
@@ -51,6 +55,7 @@ const RUTAS = [
   { path: 'rutas',     componente: 'AbmRutas',      icon: 'pi-sitemap',        title: 'Rutas',      orden_visualizacion: 4, root: 'acceso' },
   { path: 'precios_comunitarios', componente: 'AbmPreciosComunitarios', icon: 'pi-tags', title: 'Precios Comunitarios', orden_visualizacion: 5, root: 'acceso' },
   { path: 'alias_productos', componente: 'AbmAliasProductos', icon: 'pi-address-book', title: 'Alias de Productos', orden_visualizacion: 4 },
+  { path: 'categorias',    componente: 'AbmCategorias',    icon: 'pi-table',           title: 'Categorías',  orden_visualizacion: 5 },
 ]
 
 async function seed_rbac() {

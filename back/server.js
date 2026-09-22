@@ -110,6 +110,7 @@ async function regenerar_diccionarios(){
   let category = await global.knex('category').select()
   global.alias_productos = await global.knex('alias_productos').select()
                               .join('products', 'products.id', 'alias_productos.product_id')
+  let productos_todos = await global.knex('products').select()
   let precios_hoy = await global.knex('price_today').select()
   let product_category = await global.knex('product_category').select()
 
@@ -140,12 +141,15 @@ async function regenerar_diccionarios(){
     }
 
     console.log('[regenerar_diccionarios] Generando diccionarios de productos...')
-    for (let i=0; i < global.alias_productos.length; i++){
-      global.alias_productos[i].name = global.alias_productos[i].name.normalize('NFD')
-                                .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi,"$1")
-                                .normalize().toLowerCase()
-      global.products_diccio[global.alias_productos[i].name] = global.alias_productos[i]
-      global.products_diccio_id[global.alias_productos[i].id] = global.alias_productos[i]
+    // products_diccio se keya por nombre de producto (la resolución de nombres
+    // es siempre por nombre exacto; un alias puede apuntar a varios productos)
+    for (let i=0; i < productos_todos.length; i++){
+      const clave = productos_todos[i].name.normalize('NFD')
+                    .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi,"$1")
+                    .normalize().toLowerCase()
+      if (!global.products_diccio[clave])
+        global.products_diccio[clave] = productos_todos[i]
+      global.products_diccio_id[productos_todos[i].id] = productos_todos[i]
     }
     
     console.log('[regenerar_diccionarios] Inicializando buscador...')

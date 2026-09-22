@@ -16,6 +16,7 @@ router.use("/comercios", require("../routes/comercios"))
 router.use("/rbac", require("../routes/rbac"))
 router.use("/alias", require("../routes/alias"))
 router.use("/alias_productos", require("../routes/alias_productos"))
+router.use("/categorias", require("../routes/categoriasAdmin"))
 router.use("/precios_comunitarios", require("../routes/preciosComunitarios"))
 
 var paths = [
@@ -49,6 +50,14 @@ var paths = [
   { path: "/rbac/nueva_ruta", permisos: ["rutas.crear"] },
   { path: "/rbac/editar_ruta", permisos: ["rutas.editar"] },
   { path: "/rbac/eliminar_ruta", permisos: ["rutas.eliminar"] },
+  { path: "/categorias/get_all", permisos: ["categorias.ver"] },
+  { path: "/categorias/productos_categoria", permisos: ["categorias.ver"] },
+  { path: "/categorias/productos_disponibles", permisos: ["categorias.ver"] },
+  { path: "/categorias/add_one", permisos: ["categorias.crear"] },
+  { path: "/categorias/put_one", permisos: ["categorias.editar"] },
+  { path: "/categorias/delete_one", permisos: ["categorias.eliminar"] },
+  { path: "/categorias/add_producto", permisos: ["categorias.editar"] },
+  { path: "/categorias/remove_producto", permisos: ["categorias.editar"] },
   { path: "/precios_comunitarios/get_all", permisos: ["precios.ver"] },
   { path: "/precios_comunitarios/delete_one", permisos: ["precios.eliminar"] },
   { path: "/comercios", public: true },

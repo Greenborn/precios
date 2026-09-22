@@ -122,14 +122,17 @@ async function get_categoria( trx, articulo ){
 
 
 // Registra el nombre original (termino inicial) como alias del producto canonico.
-// Solo aplica cuando el nombre fue resuelto mediante alias_busqueda y la variante
-// aun no existe en alias_productos (unicidad por termino inicial)
+// La unicidad es por el par (alias, product_id): un mismo alias puede estar
+// relacionado a varios productos.
 async function registrar_alias_variante( trx, articulo, producto ){
     const ALIAS_ORIGINAL = articulo.alias_original
     if (!ALIAS_ORIGINAL || !producto?.id)
         return
     try {
-        const hay_alias = await trx('alias_productos').where('alias', ALIAS_ORIGINAL).first()
+        const hay_alias = await trx('alias_productos')
+            .whereRaw('LOWER(alias) = ?', [ALIAS_ORIGINAL.toLowerCase()])
+            .andWhere({ product_id: producto.id })
+            .first()
         if (!hay_alias)
             await trx('alias_productos').insert( { "alias": ALIAS_ORIGINAL, "product_id": producto.id } )
     } catch (error) {
@@ -142,12 +145,16 @@ async function get_producto( trx, articulo ){
     return new Promise( async (resolve, reject) => {
         try {
         const NAME = articulo.name
-        //console.log('products_diccio', global.products_diccio[name] )
-        let producto  = (global.products_diccio[NAME]) 
-                        ? global.products_diccio[NAME]
-                        : await global.knex('alias_productos').select()
-                            .join('products', 'products.id', 'alias_productos.product_id')
-                            .where('alias_productos.alias', NAME).first()
+        // La resolucion es siempre por nombre exacto de producto; el alias es
+        // solo registro de relacion y nunca redirige hacia otro producto.
+        const CLAVE = NAME.normalize('NFD')
+                    .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi,"$1")
+                    .normalize().toLowerCase()
+        let producto = (global.products_diccio[CLAVE])
+                        ? global.products_diccio[CLAVE]
+                        : await global.knex('products')
+                            .whereRaw('LOWER(name) = ?', [NAME.toLowerCase()])
+                            .first()
             if (producto){
                 let upd = {}
                 let ac = false

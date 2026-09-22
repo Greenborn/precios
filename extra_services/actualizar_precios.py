@@ -225,11 +225,11 @@ def get_producto(cursor, conexion, articulo):
     if nombre in cache_productos:
         producto = cache_productos[nombre]
     else:
-        # Buscar por alias
+        # Buscar por nombre exacto (case-insensitive): el alias es registro de
+        # relación y nunca redirige hacia un producto de otro nombre
         cursor.execute("""
             SELECT p.* FROM products p
-            JOIN alias_productos ap ON p.id = ap.product_id
-            WHERE ap.alias = %s
+            WHERE LOWER(p.name) = LOWER(%s)
             LIMIT 1
         """, (nombre,))
         
@@ -306,12 +306,15 @@ def get_producto(cursor, conexion, articulo):
         conexion.commit()
 
     # Registrar el nombre original (termino inicial) como alias del producto canonico.
-    # Solo aplica cuando el nombre fue resuelto via alias_busqueda y la variante
-    # aun no existe en alias_productos (unicidad por termino inicial)
+    # La unicidad es por el par (alias, product_id): un mismo alias puede estar
+    # relacionado a varios productos.
     alias_original = articulo.get('alias_original')
     if alias_original and producto.get('id'):
         try:
-            cursor.execute("SELECT 1 FROM alias_productos WHERE alias = %s LIMIT 1", (alias_original,))
+            cursor.execute(
+                "SELECT 1 FROM alias_productos WHERE LOWER(alias) = LOWER(%s) AND product_id = %s LIMIT 1",
+                (alias_original, producto['id'])
+            )
             if not cursor.fetchone():
                 cursor.execute(
                     "INSERT INTO alias_productos (alias, product_id) VALUES (%s, %s)",

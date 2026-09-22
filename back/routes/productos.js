@@ -313,21 +313,16 @@ async function resolver_vendor_form(marca) {
     return Number(id)
 }
 
-// Busca el producto por diccionario en memoria / alias / nombre exacto;
-// si no existe lo crea junto a su alias (patrón de importar_productos.get_producto)
+// Busca el producto por nombre exacto (diccionario en memoria / BD); la
+// resolución es siempre por nombre: el alias es registro de relación y no
+// redirige. Si no existe lo crea junto a su alias (unicidad por par).
 async function resolver_producto_form(nombre_canonico, marca) {
     try {
         const clave = normalizar_nombre_busqueda(nombre_canonico)
         if (global.products_diccio[clave])
             return global.products_diccio[clave]
 
-        let producto = await global.knex('alias_productos')
-            .join('products', 'products.id', 'alias_productos.product_id')
-            .whereRaw('LOWER(alias_productos.alias) = ?', [nombre_canonico.toLowerCase()])
-            .first()
-        if (producto) return producto
-
-        producto = await global.knex('products')
+        let producto = await global.knex('products')
             .whereRaw('LOWER(name) = ?', [nombre_canonico.toLowerCase()])
             .first()
         if (producto) return producto
