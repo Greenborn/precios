@@ -286,6 +286,7 @@ router.delete('/delete_one', async function (req, res) {
     const existente = await global.knex('usuarios').where({ id }).first()
     if (!existente) return responder_err(res, 'Usuario no encontrado')
 
+    await global.knex('usuarios_roles').where({ usuario_id: id }).del()
     await global.knex('usuarios').where({ id }).del()
     responder_ok(res, { message: 'Usuario eliminado correctamente' })
   } catch (error) {
