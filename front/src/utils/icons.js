@@ -22,7 +22,13 @@ const PI_TO_BI = {
   'pi-shield': 'bi-shield',
   'pi-sitemap': 'bi-diagram-3',
   'pi-user': 'bi-person',
-  'pi-users': 'bi-people'
+  'pi-users': 'bi-people',
+  'pi-tag': 'bi-tag',
+  'pi-tags': 'bi-tags',
+  'pi-chart-line': 'bi-graph-up',
+  'pi-list': 'bi-list',
+  'pi-table': 'bi-table',
+  'pi-address-book': 'bi-journal-bookmark'
 }
 
 export function piToBi(name) {

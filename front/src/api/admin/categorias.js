@@ -24,6 +24,22 @@ export function productos_disponibles(params) {
   })
 }
 
+export function categorias_disponibles(params) {
+  return request({
+    url: '/categorias/categorias_disponibles',
+    method: 'get',
+    params,
+  })
+}
+
+export function arbol(params) {
+  return request({
+    url: '/categorias/arbol',
+    method: 'get',
+    params,
+  })
+}
+
 export function add_one(data) {
   return request({
     url: '/categorias/add_one',

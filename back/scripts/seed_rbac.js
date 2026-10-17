@@ -40,6 +40,14 @@ const PERMISOS = [
   { nombre: 'categorias.crear',    descripcion: 'Crear categorías de productos' },
   { nombre: 'categorias.editar',   descripcion: 'Editar categorías de productos y su relación con productos' },
   { nombre: 'categorias.eliminar', descripcion: 'Eliminar categorías de productos' },
+  { nombre: 'alias_categorias.ver',      descripcion: 'Ver alias de categorías' },
+  { nombre: 'alias_categorias.crear',    descripcion: 'Crear alias de categorías' },
+  { nombre: 'alias_categorias.editar',   descripcion: 'Editar alias de categorías' },
+  { nombre: 'alias_categorias.eliminar', descripcion: 'Eliminar alias de categorías' },
+  { nombre: 'indices_precios.ver',      descripcion: 'Ver índices de precios' },
+  { nombre: 'indices_precios.crear',    descripcion: 'Crear índices de precios' },
+  { nombre: 'indices_precios.editar',   descripcion: 'Editar índices de precios' },
+  { nombre: 'indices_precios.eliminar', descripcion: 'Eliminar índices de precios' },
 ]
 
 // Rutas del panel de administracion. El campo "componente" debe coincidir con las
@@ -56,6 +64,8 @@ const RUTAS = [
   { path: 'precios_comunitarios', componente: 'AbmPreciosComunitarios', icon: 'pi-tags', title: 'Precios Comunitarios', orden_visualizacion: 5, root: 'acceso' },
   { path: 'alias_productos', componente: 'AbmAliasProductos', icon: 'pi-address-book', title: 'Alias de Productos', orden_visualizacion: 4 },
   { path: 'categorias',    componente: 'AbmCategorias',    icon: 'pi-table',           title: 'Categorías',  orden_visualizacion: 5 },
+  { path: 'alias_categorias', componente: 'AbmAliasCategorias', icon: 'pi-tag', title: 'Alias de Categorías', orden_visualizacion: 6 },
+  { path: 'indices_precios', componente: 'AbmIndicesPrecios', icon: 'pi-chart-line', title: 'Índices de Precios', orden_visualizacion: 7 },
 ]
 
 async function seed_rbac() {

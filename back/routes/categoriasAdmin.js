@@ -19,6 +19,8 @@ function responder_err(res, text) {
 const FIELDS_DEF_CATEGORIAS = [
   { field: 'id',            headerName: 'ID',           sortable: true },
   { field: 'name',          headerName: 'Categoría',    sortable: true },
+  { field: 'root_category_id', headerName: 'ID Categoría padre', hide: true },
+  { field: 'root_category_name', headerName: 'Categoría padre', sortable: true },
   { field: 'cant_productos', headerName: 'Productos',   sortable: true },
 ]
 
@@ -46,10 +48,13 @@ function armar_query() {
     .select(
       'category.id as id',
       'category.name as name',
-      global.knex.raw('COUNT(product_category.product_id) as cant_productos')
+      'category.root_category_id as root_category_id',
+      'padre.name as root_category_name',
+      global.knex.raw('COUNT(DISTINCT product_category.product_id) as cant_productos')
     )
     .leftJoin('product_category', 'product_category.category_id', 'category.id')
-    .groupBy('category.id', 'category.name')
+    .leftJoin('category as padre', 'padre.id', 'category.root_category_id')
+    .groupBy('category.id', 'category.name', 'category.root_category_id', 'padre.name')
 }
 
 // GET /get_all - listado paginado (contrato TableEditor)
@@ -67,6 +72,7 @@ router.get('/get_all', async function (req, res) {
   const FILTER_COLUMNS = {
     id: ['category.id', 'eq'],
     name: ['category.name', 'like'],
+    root_category_name: ['padre.name', 'like'],
   }
 
   function aplicar_filtros(q) {
@@ -82,13 +88,12 @@ router.get('/get_all', async function (req, res) {
   }
 
   const query = aplicar_filtros(armar_query())
-  const countQuery = aplicar_filtros(
-    global.knex('category').select('category.id')
-  ).clearSelect().count('category.id as c')
+  const countQuery = aplicar_filtros(armar_query()).clearSelect().clearOrder().clearGroup().countDistinct('category.id as c')
 
   const SORT_COLUMNS = {
     id: 'category.id',
     name: 'category.name',
+    root_category_name: 'padre.name',
     cant_productos: 'cant_productos',
   }
   const orderColumn = SORT_COLUMNS[sortField] || SORT_COLUMNS.name
@@ -166,9 +171,63 @@ router.get('/productos_disponibles', async function (req, res) {
   }
 })
 
-// Valida nombre de categoria comun a alta y edicion (id_actual en edicion)
+// GET /categorias_disponibles - categorias (id + name) para el selector de
+// categoria padre. exclude_id evita que una categoria se seleccione a si
+// misma como padre.
+router.get('/categorias_disponibles', async function (req, res) {
+  const search = String(req.query.search || '').trim()
+  const exclude_id = String(req.query.exclude_id || '').trim()
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100)
+
+  try {
+    let query = global.knex('category').select('id', 'name')
+    if (search) query = query.where('name', 'like', `%${search}%`)
+    if (exclude_id) query = query.whereNot({ id: exclude_id })
+    const rows = await query.orderBy('name', 'asc').limit(limit)
+    responder_ok(res, { rows })
+  } catch (error) {
+    console.log('[categorias] Error en categorias_disponibles:', error)
+    responder_err(res, 'Error al buscar categorías')
+  }
+})
+
+// GET /arbol - hijos directos de una categoria (lazy-load para la vista de
+// arbol). Sin parent_id devuelve las categorias raiz (root_category_id NULL).
+router.get('/arbol', async function (req, res) {
+  const parent_id = String(req.query.parent_id || '').trim()
+
+  try {
+    let query = global.knex('category')
+      .select(
+        'category.id as id',
+        'category.name as name',
+        global.knex.raw('COUNT(DISTINCT product_category.product_id) as cant_productos'),
+        global.knex.raw('COUNT(DISTINCT hijos.id) as cant_hijos')
+      )
+      .leftJoin('product_category', 'product_category.category_id', 'category.id')
+      .leftJoin('category as hijos', 'hijos.root_category_id', 'category.id')
+      .groupBy('category.id', 'category.name')
+      .orderBy('category.name', 'asc')
+
+    query = parent_id ? query.where('category.root_category_id', parent_id) : query.whereNull('category.root_category_id')
+
+    const rows = await query
+    for (const r of rows) {
+      r.cant_productos = parseInt(r.cant_productos) || 0
+      r.tiene_hijos = (parseInt(r.cant_hijos) || 0) > 0
+      delete r.cant_hijos
+    }
+    responder_ok(res, { rows })
+  } catch (error) {
+    console.log('[categorias] Error en arbol:', error)
+    responder_err(res, 'Error al obtener el árbol de categorías')
+  }
+})
+
+// Valida nombre y categoria padre, comun a alta y edicion (id_actual en edicion)
 async function validar_payload(body, id_actual) {
   const name = limpiar_nombre(body?.name)
+  const root_category_id = String(body?.root_category_id ?? '').trim() || null
 
   if (!name) return { error: 'El nombre de la categoría es obligatorio' }
 
@@ -178,17 +237,37 @@ async function validar_payload(body, id_actual) {
   const duplicado = await q.first()
   if (duplicado) return { error: 'Ya existe una categoría con ese nombre' }
 
-  return { name }
+  if (root_category_id) {
+    if (id_actual && root_category_id === id_actual)
+      return { error: 'Una categoría no puede ser su propia categoría padre' }
+
+    const padre = await global.knex('category').where({ id: root_category_id }).first()
+    if (!padre) return { error: 'La categoría padre indicada no existe' }
+
+    // evita ciclos: ninguno de los ancestros del padre elegido puede ser la categoria actual
+    if (id_actual) {
+      let actual = padre
+      const visitados = new Set([id_actual])
+      while (actual && actual.root_category_id) {
+        if (visitados.has(actual.root_category_id))
+          return { error: 'La categoría padre elegida genera un ciclo de categorías' }
+        visitados.add(actual.root_category_id)
+        actual = await global.knex('category').where({ id: actual.root_category_id }).first()
+      }
+    }
+  }
+
+  return { name, root_category_id }
 }
 
-// POST /add_one - crea una categoria { name }
+// POST /add_one - crea una categoria { name, root_category_id? }
 router.post('/add_one', async function (req, res) {
   try {
     const validacion = await validar_payload(req.body, null)
     if (validacion.error) return responder_err(res, validacion.error)
 
     const id = uuid.v7()
-    await global.knex('category').insert({ id, name: validacion.name })
+    await global.knex('category').insert({ id, name: validacion.name, root_category_id: validacion.root_category_id })
 
     await regenerar_caches()
     responder_ok(res, { message: 'Categoría creada correctamente' })
@@ -198,7 +277,7 @@ router.post('/add_one', async function (req, res) {
   }
 })
 
-// PUT /put_one - edita una categoria { id, name }
+// PUT /put_one - edita una categoria { id, name, root_category_id? }
 router.put('/put_one', async function (req, res) {
   const id_actual = String(req.body?.id ?? '').trim()
   if (!id_actual) return responder_err(res, 'Categoría requerida')
@@ -210,7 +289,8 @@ router.put('/put_one', async function (req, res) {
     const validacion = await validar_payload(req.body, id_actual)
     if (validacion.error) return responder_err(res, validacion.error)
 
-    await global.knex('category').where({ id: id_actual }).update({ name: validacion.name })
+    await global.knex('category').where({ id: id_actual })
+      .update({ name: validacion.name, root_category_id: validacion.root_category_id })
 
     await regenerar_caches()
     responder_ok(res, { message: 'Categoría actualizada correctamente' })
@@ -242,6 +322,14 @@ router.delete('/delete_one', async function (req, res) {
     const en_empresa = await global.knex('enterprise_category').where({ category_id: id }).first()
     if (en_empresa)
       return responder_err(res, 'No se puede eliminar: la categoría está asociada a empresas')
+
+    const con_hijos = await global.knex('category').where({ root_category_id: id }).first()
+    if (con_hijos)
+      return responder_err(res, 'No se puede eliminar: la categoría tiene subcategorías')
+
+    const con_alias = await global.knex('category_alias').where({ category_id: id }).first()
+    if (con_alias)
+      return responder_err(res, 'No se puede eliminar: la categoría tiene alias asociados')
 
     await global.knex('category').where({ id }).del()
 

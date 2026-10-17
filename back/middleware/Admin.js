@@ -17,6 +17,8 @@ router.use("/rbac", require("../routes/rbac"))
 router.use("/alias", require("../routes/alias"))
 router.use("/alias_productos", require("../routes/alias_productos"))
 router.use("/categorias", require("../routes/categoriasAdmin"))
+router.use("/alias_categorias", require("../routes/aliasCategorias"))
+router.use("/indices_precios", require("../routes/indicesPreciosAdmin"))
 router.use("/precios_comunitarios", require("../routes/preciosComunitarios"))
 
 var paths = [
@@ -53,11 +55,23 @@ var paths = [
   { path: "/categorias/get_all", permisos: ["categorias.ver"] },
   { path: "/categorias/productos_categoria", permisos: ["categorias.ver"] },
   { path: "/categorias/productos_disponibles", permisos: ["categorias.ver"] },
+  { path: "/categorias/categorias_disponibles", permisos: ["categorias.ver"] },
+  { path: "/categorias/arbol", permisos: ["categorias.ver"] },
   { path: "/categorias/add_one", permisos: ["categorias.crear"] },
   { path: "/categorias/put_one", permisos: ["categorias.editar"] },
   { path: "/categorias/delete_one", permisos: ["categorias.eliminar"] },
   { path: "/categorias/add_producto", permisos: ["categorias.editar"] },
   { path: "/categorias/remove_producto", permisos: ["categorias.editar"] },
+  { path: "/alias_categorias/get_all", permisos: ["alias_categorias.ver"] },
+  { path: "/alias_categorias/categorias_disponibles", permisos: ["alias_categorias.ver"] },
+  { path: "/alias_categorias/add_one", permisos: ["alias_categorias.crear"] },
+  { path: "/alias_categorias/put_one", permisos: ["alias_categorias.editar"] },
+  { path: "/alias_categorias/delete_one", permisos: ["alias_categorias.eliminar"] },
+  { path: "/indices_precios/get_all", permisos: ["indices_precios.ver"] },
+  { path: "/indices_precios/alias_categoria_disponibles", permisos: ["indices_precios.ver"] },
+  { path: "/indices_precios/add_one", permisos: ["indices_precios.crear"] },
+  { path: "/indices_precios/put_one", permisos: ["indices_precios.editar"] },
+  { path: "/indices_precios/delete_one", permisos: ["indices_precios.eliminar"] },
   { path: "/precios_comunitarios/get_all", permisos: ["precios.ver"] },
   { path: "/precios_comunitarios/delete_one", permisos: ["precios.eliminar"] },
   { path: "/comercios", public: true },
