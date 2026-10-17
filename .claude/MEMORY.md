@@ -1,0 +1,1 @@
+- [No commits](memory/feedback_no_commits.md) — User handles all git commits with their own signature

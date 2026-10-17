@@ -90,6 +90,7 @@ const sso = createSsoAuth({
   // defaults de la librería; solo cambia la tabla de usuarios.
   tables: { user: 'usuarios' },
   rbac: true,
+  adminRoles: ['administrador'],
   createUserFromSso,
   logger: { error: console.error, warn: console.warn, log: console.log },
 })

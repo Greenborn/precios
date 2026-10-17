@@ -65,7 +65,11 @@
             :placeholder="campo.autocomplete.placeholder || campo.headerName"
             :label="campo.headerName"
             :disabled="campo.editable === false"
-            @update:modelValue="v => modelo[campo.field] = v" />
+            @update:modelValue="v => modelo[campo.field] = v"
+            @item-selected="item => {
+              modelo[campo.field] = item[campo.autocomplete.optionValue];
+              if (campo.display_field) modelo[campo.display_field] = item[campo.autocomplete.label];
+            }" />
 
           <div
             v-if="campo.form_type == 'radiobutton'"

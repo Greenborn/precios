@@ -240,6 +240,8 @@ router.put('/put_one', async function (req, res) {
   const { id, name, apellido, email, pass, roles } = req.body || {}
   if (!id) return responder_err(res, 'ID requerido')
 
+  const actor = req.session && req.session.u_data ? req.session.u_data : null
+
   try {
     const usuario = await global.knex('usuarios').where({ id }).first()
     if (!usuario) return responder_err(res, 'Usuario no encontrado')
@@ -255,20 +257,18 @@ router.put('/put_one', async function (req, res) {
     if (email) actualizar.email = email
     if (pass && pass !== '********') actualizar.pass = await bcrypt.hash(pass, 10)
 
-    if (Object.keys(actualizar).length > 0) {
-      await global.knex('usuarios').where({ id }).update(actualizar)
+    if (roles !== undefined && !Array.isArray(roles)) {
+      return responder_err(res, 'roles debe ser un array')
     }
 
-    if (roles !== undefined && Array.isArray(roles)) {
-      await global.knex('usuarios_roles').where({ usuario_id: id }).del()
-      if (roles.length > 0) {
-        const inserts = roles.map((rolId) => ({ usuario_id: id, rol_id: rolId }))
-        await global.knex('usuarios_roles').insert(inserts)
-      }
-    }
+    await sso.updateUser(id, { ...actualizar, ...(roles !== undefined ? { roles } : {}) }, { actorId: actor?.id })
 
     responder_ok(res, { message: 'Usuario actualizado correctamente' })
   } catch (error) {
+    if (error.code === 'USER_NOT_FOUND') return responder_err(res, 'Usuario no encontrado')
+    if (error.code === 'FORBIDDEN_NOT_ADMIN' || error.code === 'MISSING_ACTOR_ID') {
+      return responder_err(res, 'No tienes permisos para editar usuarios')
+    }
     console.log('[userAdmin] Error en put_one:', error)
     responder_err(res, 'Error al actualizar el usuario')
   }
@@ -283,13 +283,14 @@ router.delete('/delete_one', async function (req, res) {
   if (usuario && Number(id) === usuario.id) return responder_err(res, 'No puedes eliminar tu propio usuario')
 
   try {
-    const existente = await global.knex('usuarios').where({ id }).first()
-    if (!existente) return responder_err(res, 'Usuario no encontrado')
-
-    await global.knex('usuarios_roles').where({ usuario_id: id }).del()
-    await global.knex('usuarios').where({ id }).del()
+    await sso.deleteUser(id, { actorId: usuario?.id })
     responder_ok(res, { message: 'Usuario eliminado correctamente' })
   } catch (error) {
+    if (error.code === 'USER_NOT_FOUND') return responder_err(res, 'Usuario no encontrado')
+    if (error.code === 'FORBIDDEN_NOT_ADMIN' || error.code === 'MISSING_ACTOR_ID') {
+      return responder_err(res, 'No tienes permisos para eliminar usuarios')
+    }
+    if (error.code === 'SELF_DELETE_NOT_ALLOWED') return responder_err(res, 'No puedes eliminar tu propio usuario')
     console.log('[userAdmin] Error en delete_one:', error)
     responder_err(res, 'Error al eliminar el usuario')
   }

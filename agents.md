@@ -1,5 +1,7 @@
 # Guía de Componentes Reutilizables - Formularios Administrativos
 
+**⚠️ IMPORTANTE:** No realizar commits. El usuario se encarga de crear los commits con su propia firma.
+
 Esta guía documenta los componentes genéricos reutilizables para formularios administrativos en el sistema Greenborn.
 
 ## ProductSelector
