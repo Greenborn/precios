@@ -36,7 +36,7 @@
   function campos_form() {
     return [
       { field: 'alias', headerName: 'Alias', required: true, form_min_max: [1, 512] },
-      { field: 'product_id', headerName: 'Producto', form_type: 'autocomplete', required: true,
+      { field: 'product_id', headerName: 'Producto', form_type: 'product-selector', required: true,
         display_field: 'product_name',
         autocomplete: {
           search: buscar_productos,

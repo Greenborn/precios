@@ -55,6 +55,18 @@
             :disabled="campo.editable === false"
             @update:modelValue="v => modelo[campo.field] = v" />
 
+          <ProductSelector
+            v-if="campo.form_type == 'product-selector' && campo.autocomplete"
+            :modelValue="modelo[campo.field]"
+            :displayValue="campo.display_field ? (modelo[campo.display_field] ?? '') : ''"
+            :search="campo.autocomplete.search"
+            :optionLabel="campo.autocomplete.label"
+            :optionValue="campo.autocomplete.optionValue"
+            :placeholder="campo.autocomplete.placeholder || campo.headerName"
+            :label="campo.headerName"
+            :disabled="campo.editable === false"
+            @update:modelValue="v => modelo[campo.field] = v" />
+
           <div
             v-if="campo.form_type == 'radiobutton'"
             v-for="(campo_sub_opts) in parametros.selectData[campo.field].data" :key="campo_sub_opts"
@@ -101,6 +113,7 @@
   import { ref, onMounted } from 'vue';
   import { AppStore } from '@/stores/app'
   import { fechaStringToDate, fechaDateToString } from '@/helpers/formatter'
+  import ProductSelector from '@/components/genericos/ProductSelector.vue'
 
   defineExpose({ actualizar_modelo })
 
@@ -118,6 +131,7 @@
     'cancel': { 'visible':true }
   })
   const btnSubmit = ref({ label: "Guardar", icon: 'pi-save' })
+  const productosCache = ref({})
 
   async function guardar(){
     traducir_campos_a_out()
