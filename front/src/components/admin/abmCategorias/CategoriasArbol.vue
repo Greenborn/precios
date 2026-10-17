@@ -25,12 +25,16 @@
   const emit = defineEmits(['rowSelected'])
 
   const arbol_ref = ref()
+  const filtro = ref('')
 
   // nodoPadre es null para el nivel raiz. Se anota el padre en cada hijo
   // (conocido por contexto) para poder precargar el selector "Categoría
-  // padre" al editar desde el arbol.
+  // padre" al editar desde el arbol. El filtro por nombre solo se aplica al
+  // nivel raiz: el backend ignora la jerarquia y busca en todas las
+  // categorias, mostrando como "raiz" cualquier coincidencia (se puede
+  // seguir expandiendo para ver sus hijos reales).
   async function cargarNodos(nodoPadre) {
-    const res = await arbol({ parent_id: nodoPadre ? nodoPadre.id : '' })
+    const res = await arbol({ parent_id: nodoPadre ? nodoPadre.id : '', search: nodoPadre ? '' : filtro.value })
     const rows = (res && res.stat && res.data?.rows) || []
     if (!nodoPadre) return rows
     return rows.map(r => ({ ...r, root_category_id: nodoPadre.id, root_category_name: nodoPadre.name }))
@@ -40,7 +44,12 @@
     emit('rowSelected', nodo)
   }
 
-  defineExpose({ refresh: () => arbol_ref.value?.refrescar() })
+  function filtrar(texto) {
+    filtro.value = texto || ''
+    arbol_ref.value?.refrescar()
+  }
+
+  defineExpose({ refresh: () => arbol_ref.value?.refrescar(), filtrar })
 </script>
 
 <style scoped>
@@ -50,6 +59,7 @@
     padding: 0.5rem;
     max-height: 480px;
     overflow-y: auto;
+    width: 100%;
   }
 
   .nodo-nombre {

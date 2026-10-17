@@ -1,9 +1,10 @@
 <template>
-  <div class="mb-2">
+  <div class="mb-2 d-flex align-items-center flex-wrap gap-1">
     <Button label="Nueva" icon="pi-plus" @click="accion_crear" />
     <Button label="Editar" icon="pi-pencil" class="ms-1" :disabled="!seleccionado" @click="crud.editarFila" />
     <Button label="Borrar" icon="pi-trash" class="ms-1" :disabled="!seleccionado" @click="accion_borrar" />
     <Button label="Productos" icon="pi-list" class="ms-1" :disabled="!seleccionado" @click="productos" />
+    <InputText v-model="filtro" class="filtro-nombre ms-auto" placeholder="Filtrar por nombre..." @input="on_filtro" />
   </div>
   <CategoriasArbol ref="arbol_ref" @rowSelected="onRowSelected" />
 </template>
@@ -20,6 +21,7 @@
 
   const arbol_ref = ref()
   const seleccionado = ref(null)
+  const filtro = ref('')
 
   const nombre_elemento = { singular: 'Categoría', plural: 'Categorías', genero: 'F' }
 
@@ -71,7 +73,17 @@
   function onRowSelected(sel) {
     seleccionado.value = sel
   }
+
+  let timer_filtro = null
+  function on_filtro() {
+    clearTimeout(timer_filtro)
+    timer_filtro = setTimeout(() => arbol_ref.value?.filtrar(filtro.value), 400)
+  }
 </script>
 
 <style scoped>
+  .filtro-nombre {
+    max-width: 320px;
+    width: 100%;
+  }
 </style>

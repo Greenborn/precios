@@ -193,8 +193,11 @@ router.get('/categorias_disponibles', async function (req, res) {
 
 // GET /arbol - hijos directos de una categoria (lazy-load para la vista de
 // arbol). Sin parent_id devuelve las categorias raiz (root_category_id NULL).
+// Con search, ignora el nivel pedido y busca por nombre en todas las
+// categorias (para encontrar coincidencias en cualquier nivel del arbol).
 router.get('/arbol', async function (req, res) {
   const parent_id = String(req.query.parent_id || '').trim()
+  const search = String(req.query.search || '').trim()
 
   try {
     let query = global.knex('category')
@@ -209,7 +212,11 @@ router.get('/arbol', async function (req, res) {
       .groupBy('category.id', 'category.name')
       .orderBy('category.name', 'asc')
 
-    query = parent_id ? query.where('category.root_category_id', parent_id) : query.whereNull('category.root_category_id')
+    if (search) {
+      query = query.where('category.name', 'like', `%${search}%`)
+    } else {
+      query = parent_id ? query.where('category.root_category_id', parent_id) : query.whereNull('category.root_category_id')
+    }
 
     const rows = await query
     for (const r of rows) {
