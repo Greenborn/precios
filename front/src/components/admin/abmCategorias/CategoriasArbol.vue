@@ -57,7 +57,6 @@
     border: 1px solid var(--bs-border-color, #dee2e6);
     border-radius: 0.375rem;
     padding: 0.5rem;
-    max-height: 480px;
     overflow-y: auto;
     width: 100%;
   }

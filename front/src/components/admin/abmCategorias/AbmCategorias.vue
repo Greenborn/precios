@@ -1,12 +1,14 @@
 <template>
-  <div class="mb-2 d-flex align-items-center flex-wrap gap-1">
-    <Button label="Nueva" icon="pi-plus" @click="accion_crear" />
-    <Button label="Editar" icon="pi-pencil" class="ms-1" :disabled="!seleccionado" @click="crud.editarFila" />
-    <Button label="Borrar" icon="pi-trash" class="ms-1" :disabled="!seleccionado" @click="accion_borrar" />
-    <Button label="Productos" icon="pi-list" class="ms-1" :disabled="!seleccionado" @click="productos" />
-    <InputText v-model="filtro" class="filtro-nombre ms-auto" placeholder="Filtrar por nombre..." @input="on_filtro" />
+  <div class="abm-categorias">
+    <div class="mb-2 d-flex align-items-center flex-wrap gap-1">
+      <Button label="Nueva" icon="pi-plus" @click="accion_crear" />
+      <Button label="Editar" icon="pi-pencil" class="ms-1" :disabled="!seleccionado" @click="crud.editarFila" />
+      <Button label="Borrar" icon="pi-trash" class="ms-1" :disabled="!seleccionado" @click="accion_borrar" />
+      <Button label="Productos" icon="pi-list" class="ms-1" :disabled="!seleccionado" @click="productos" />
+      <InputText v-model="filtro" class="filtro-nombre ms-auto" placeholder="Filtrar por nombre..." @input="on_filtro" />
+    </div>
+    <CategoriasArbol ref="arbol_ref" class="abm-categorias__arbol" @rowSelected="onRowSelected" />
   </div>
-  <CategoriasArbol ref="arbol_ref" @rowSelected="onRowSelected" />
 </template>
 
 <script setup>
@@ -82,6 +84,17 @@
 </script>
 
 <style scoped>
+  .abm-categorias {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .abm-categorias__arbol {
+    flex: 1;
+    min-height: 0;
+  }
+
   .filtro-nombre {
     max-width: 320px;
     width: 100%;
