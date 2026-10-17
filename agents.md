@@ -2,6 +2,8 @@
 
 **⚠️ IMPORTANTE:** No realizar commits. El usuario se encarga de crear los commits con su propia firma.
 
+**⚠️ IMPORTANTE:** Prohibido matar procesos (`kill`, `pkill`, `killall`, `xargs kill`, etc.) sin preguntar antes al usuario. En especial, nunca usar un patrón genérico (ej. `pkill -f "vite"`, `pkill -f node`) para bajar un proceso propio: puede matar procesos de otros proyectos que ya estaban corriendo. Si hay que terminar un proceso levantado en la sesión, matar el PID exacto devuelto al lanzarlo (o el job en foreground/background), nunca por patrón de nombre.
+
 Esta guía documenta los componentes genéricos reutilizables para formularios administrativos en el sistema Greenborn.
 
 ## ProductSelector
