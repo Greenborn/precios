@@ -58,6 +58,7 @@ router.get('/get_all', async function (req, res) {
   }
 
   function aplicar_filtros(q) {
+    if (req.query.category_id) q.where('category_alias.category_id', req.query.category_id)
     for (const [field, value] of Object.entries(filters)) {
       const def = FILTER_COLUMNS[field]
       if (!def || value === undefined || value === null || value === '') continue

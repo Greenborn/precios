@@ -5,6 +5,7 @@
       <Button label="Editar" icon="pi-pencil" class="ms-1" :disabled="!seleccionado" @click="crud.editarFila" />
       <Button label="Borrar" icon="pi-trash" class="ms-1" :disabled="!seleccionado" @click="accion_borrar" />
       <Button label="Productos" icon="pi-list" class="ms-1" :disabled="!seleccionado" @click="productos" />
+      <Button label="Alias" icon="pi-tag" class="ms-1" :disabled="!seleccionado" @click="alias" />
       <InputText v-model="filtro" class="filtro-nombre ms-auto" placeholder="Filtrar por nombre..." @input="on_filtro" />
     </div>
     <CategoriasArbol ref="arbol_ref" class="abm-categorias__arbol" @rowSelected="onRowSelected" />
@@ -16,6 +17,7 @@
   import { buildCrud } from '@/helpers/tableEditorVue'
   import { add_one, put_one, delete_one, categorias_disponibles } from '@/api/admin/categorias'
   import ProductosCategoria from './ProductosCategoria.vue'
+  import AliasCategoria from './AliasCategoria.vue'
   import CategoriasArbol from './CategoriasArbol.vue'
   import { AppStore } from '@/stores/app'
 
@@ -69,6 +71,16 @@
     storeApp.mostrar_modal(ProductosCategoria, 'Productos de: ' + seleccionado.value.name, {
       categoria: seleccionado.value,
       guardado: () => arbol_ref.value?.refresh(),
+    })
+  }
+
+  function alias() {
+    if (!seleccionado.value) {
+      storeApp.mostrar_alerta('Es necesario seleccionar una categoría')
+      return
+    }
+    storeApp.mostrar_modal(AliasCategoria, 'Alias de: ' + seleccionado.value.name, {
+      categoria: seleccionado.value,
     })
   }
 
