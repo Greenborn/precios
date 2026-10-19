@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watchEffect } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
@@ -145,6 +145,11 @@ function agregar(){
 
 onMounted(()=>{
     storeApp.ruta_actual['path'] = route.path
+    document.body.classList.add('cls-public')
+})
+
+onBeforeUnmount(()=>{
+    document.body.classList.remove('cls-public')
 })
 </script>
 

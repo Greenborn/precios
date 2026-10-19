@@ -19,6 +19,14 @@ body {
   overflow: hidden;
 }
 
+/* Paginas publicas: el documento debe poder scrollear (el panel admin usa
+   scroll interno en .app-content). */
+body.cls-public #app {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 /* ---------- Login ---------- */
 .login-container {
   height: 100dvh;
