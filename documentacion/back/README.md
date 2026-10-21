@@ -114,13 +114,18 @@ back/
 - **Consulta**: [Búsqueda Dinámica](../../back/documentacion/busqueda_dinamica.md)
 
 ### Importación de Precios
-- **Archivo**: `controllers/importar_productos.js`
+- **Archivos**: `routes/productos.js` (encola) y
+  `extra_services/actualizar_precios.py` (procesa, proceso aparte)
 - **Características**:
-  - Cola asíncrona de procesamiento
+  - Cola externa (servicio Node en 3501): el backend solo encola
+  - El consumidor Python toma **un item por request** y escribe en la base, para
+    no volcar el volumen diario de golpe
   - Transacciones de base de datos
   - Validación inteligente
   - Estadísticas automáticas
-- **Consulta**: [Endpoints](./endpoints.md#importación)
+  - Reintento de fallos transitorios con backoff
+- **Consulta**: [Endpoints](./endpoints.md#importación) ·
+  [Servicio de colas externo](../../back/documentacion/servicio_colas_externo.md)
 
 ### Actualización de Precios Actuales
 - **Archivo**: `scripts/actualizar_price_today.js`
@@ -217,11 +222,14 @@ Cliente → GET /publico/busqueda/precios
 ### 2. Importación de Precios
 ```
 Sistema Externo → POST /publico/productos/importar
-              → Cola de procesamiento
+              → Backend: valida, marca `tipo` y encola (POST /add_data)
+              → Servicio de Colas (Node, 3501): almacena y persiste
+              → Consumidor Python: GET /get_data, un item por vez
               → Validación y normalización
               → Insertar en DB
               → Actualizar price_today
               → Actualizar estructura de búsqueda
+              → POST /interno/sync_cache (refresca cache de la API)
 ```
 
 ### 3. Actualización de Precios Actuales (24h)

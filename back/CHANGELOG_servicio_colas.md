@@ -5,6 +5,62 @@
 
 ---
 
+## 📅 2026-10-21 - Corrección: quién procesa la cola
+
+Las secciones anteriores de este changelog (y la especificación del servicio)
+decían que el **servicio de colas Node procesa los items y actualiza la base**.
+Eso nunca se implementó así.
+
+**Arquitectura real, desde la migración:**
+
+```
+Cliente → Backend API (3001)         encola, no procesa
+        → Servicio de Colas (3501)   almacena y persiste, NO toca MySQL
+        → Consumidor Python          procesa y escribe en MySQL
+           (extra_services/actualizar_precios.py)
+```
+
+El servicio de colas es un buffer: expone `/add_data`, `/get_data`,
+`/count_data` y nada más. Quien ejecuta la lógica de importación es el script
+Python, que pide **un item por request** a `GET /get_data`. Se procesa de a uno
+porque todos los días entran muchísimos artículos y cada uno implica varias
+consultas: volcar el lote de golpe bloquearía tablas que la API pública está
+leyendo y dejaría un estado imposible de retomar ante un corte.
+
+**Tipos realmente soportados:** `producto`, `oferta`, `regenerar_precios`. El
+tipo `accion` que mencionaba la entrada del 2026-03-12 nunca se implementó.
+
+**Cambios de esta corrección:**
+
+- Documentación reescrita:
+  [`extra_services/ESPECIFICACION_SERVICIO_COLAS.md`](../extra_services/ESPECIFICACION_SERVICIO_COLAS.md)
+  (contrato del buffer, sin workers ni acceso a base),
+  [`documentacion/servicio_colas_externo.md`](documentacion/servicio_colas_externo.md)
+  (reparada y con las tres responsabilidades separadas) y nuevo
+  [`extra_services/README.md`](../extra_services/README.md).
+- Consumidor Python (`actualizar_precios.py`):
+  - **Reintentos.** Antes, un item que fallaba se descartaba: con la base caída
+    la cola se drenaba entera perdiendo todo. Ahora los fallos transitorios se
+    reencolan con `_intentos` (hasta `QUEUE_MAX_RETRY`) y los permanentes
+    (datos inválidos, oferta duplicada o anterior a ayer) se descartan con log.
+  - **Backoff incremental** ante fallos transitorios consecutivos
+    (`QUEUE_RETRY_BACKOFF` × fallos, tope `QUEUE_RETRY_BACKOFF_MAX`).
+  - **Chequeo de conectividad sin escribir en la cola.** Antes hacía
+    `POST /add_data` con `clave: "test"` en cada arranque, dejando basura
+    encolada; ahora usa `/count_data` con fallback a `/health`.
+  - **Log de backlog** cada `QUEUE_BACKLOG_LOG_EVERY` items procesados.
+  - Parámetros configurables por entorno (`QUEUE_KEY`, `QUEUE_POLL_INTERVAL`,
+    `QUEUE_MAX_RETRY`, `QUEUE_RETRY_BACKOFF`, `QUEUE_RETRY_BACKOFF_MAX`,
+    `QUEUE_BACKLOG_LOG_EVERY`).
+- `env.example`: documentadas `internal_sync_key` y `API_BASE_URL`, que el
+  consumidor ya usaba para `POST /interno/sync_cache`, más las variables nuevas.
+
+> Las secciones siguientes se conservan como registro histórico de la migración
+> de diciembre de 2025. Donde dicen que el servicio externo procesa y actualiza
+> la base, debe leerse **consumidor Python**.
+
+---
+
 ## 🎯 Objetivo
 
 Migrar el sistema de importación a una arquitectura completamente desacoplada donde:

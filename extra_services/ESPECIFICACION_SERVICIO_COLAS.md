@@ -2,11 +2,46 @@
 
 ## 📋 Resumen
 
-El servicio de colas externo debe:
-1. **Recibir** datos del backend vía API REST
-2. **Almacenar** datos en colas persistentes
-3. **Procesar** automáticamente los datos
-4. **Actualizar** la base de datos
+El servicio de colas es un **buffer**, no un procesador. Su única
+responsabilidad es almacenar items y entregarlos de a uno cuando se los pide.
+
+```
+Scrapers / clientes
+      │  POST /importar, /importar_oferta  (lotes grandes)
+      ▼
+Backend API (Node, puerto 3001)          → valida KEY, agrega `tipo`, encola
+      │  POST /add_data  (un item por request)
+      ▼
+Servicio de Colas (Node, puerto 3501)    → ALMACENA y PERSISTE. No toca la base
+      │  GET /get_data   (un item por request)
+      ▼
+Consumidor (Python, extra_services/actualizar_precios.py)
+      │                                  → PROCESA y escribe en MySQL
+      ▼
+MySQL  +  POST /interno/sync_cache (avisa a la API para refrescar su cache)
+```
+
+### Por qué existe la cola
+
+Todos los días entran **muchísimos artículos** (decenas de miles entre
+productos y ofertas). Volcarlos de golpe en la base no es viable:
+
+- Cada artículo implica varias consultas (producto, categoría, relación,
+  último precio, variación, `price_today`, estadísticas), no un `INSERT` suelto.
+- Un lote grande en una sola transacción bloquea tablas que la API pública está
+  leyendo al mismo tiempo.
+- Si el proceso se corta a mitad de camino, no hay forma barata de saber qué
+  quedó aplicado.
+
+Con la cola, el scraper descarga su lote rápido y se desentiende; el consumidor
+drena a su propio ritmo, de a un item, y la base nunca ve un pico. La cola es
+además el único lugar donde los datos esperan: si el consumidor está caído, los
+items quedan encolados en vez de perderse.
+
+> ⚠️ **No implementar procesamiento dentro de este servicio.** La lógica de
+> importación (productos, ofertas, estadísticas, cache) vive en el consumidor
+> Python. Este servicio no necesita acceso a MySQL ni conocer el formato de los
+> items más allá de guardarlos y devolverlos.
 
 ---
 
@@ -14,7 +49,8 @@ El servicio de colas externo debe:
 
 ### POST /add_data
 
-Recibe items para agregar a una cola.
+Agrega un item a una cola. Lo usa el backend al importar, y el consumidor al
+reencolar un item que falló.
 
 **Request:**
 ```json
@@ -22,8 +58,9 @@ POST /add_data
 Content-Type: application/json
 
 {
-  "clave": "productos",
+  "clave": "precios",
   "data": {
+    "tipo": "producto",
     "name": "Leche La Serenísima 1L",
     "price": 850,
     "branch_id": 10,
@@ -33,294 +70,218 @@ Content-Type: application/json
 }
 ```
 
-**Response (éxito):**
-```json
-{
-  "success": true
-}
-```
+**Response:**
+- `200`: `{ "success": true }`
+- `400`: `{ "error": "Clave inválida" }` — clave ausente o >255 caracteres, o `data` faltante
 
-**Response (error):**
-```json
-{
-  "error": "Clave inválida"
-}
-```
+El servicio **no valida el contenido de `data`**: lo guarda tal cual lo recibe,
+incluida cualquier propiedad de control que agregue el consumidor (ver
+`_intentos` más abajo).
 
-**Status Codes:**
-- `200`: Item agregado exitosamente
-- `400`: Clave inválida (>255 caracteres) o datos faltantes
+### GET /get_data?clave=precios
 
----
+Devuelve **un** item y lo elimina de la cola (operación atómica: dos
+consumidores simultáneos no pueden recibir el mismo item).
 
-## ⚙️ Procesamiento Automático
+**Response:**
+- `200`: `{ "data": { ... } }`
+- `400`: `{ "error": "Clave inválida" }`
+- `404`: `{ "error": "No hay datos para la clave" }` — cola vacía
 
-El servicio recopila todos los elementos en una única cola llamada `precios`.
-Cada objeto almacenado debe contener un campo `tipo` que indique cómo se debe
-procesar:
+El consumidor llama a este endpoint en bucle: mientras reciba `200` pide el
+siguiente de inmediato, y ante un `404` espera `QUEUE_POLL_INTERVAL` segundos
+(1 por defecto) antes de reintentar.
 
-```javascript
-{
-  tipo: 'producto' | 'oferta' | 'accion', // campo obligatorio
-  fecha_registro: Date|string,            // obligatorio
-  // demás propiedades según la categoría
-}
-```
+### GET /count_data?clave=precios
 
-El worker principal consulta la cola `precios` de forma periódica y, tras extraer
-un item, despacha el procesamiento basándose en el valor de `tipo`.
+Cantidad de items pendientes. El consumidor lo usa al arrancar como chequeo de
+conectividad y después cada N items para loguear el atraso acumulado.
 
-```javascript
-async function procesarCaso(item) {
-    switch (item.tipo) {
-        case 'producto':
-            return procesarProducto(item)
-        case 'oferta':
-            return procesarOferta(item)
-        case 'accion':
-            // placeholder para futuras acciones específicas
-            return procesarAccion(item)
-        default:
-            console.error('Tipo desconocido:', item.tipo)
-            return false
-    }
-}
+**Response:**
+- `200`: `{ "count": 42 }`
+- `400`: `{ "error": "Clave inválida" }`
 
-// ejemplo del worker principal
-setInterval(async () => {
-    await procesarCola('precios', procesarCaso)
-}, CONFIG.INTERVALO_PROCESAMIENTO)
-```
+### GET /health
 
-### Procesadores existentes
+Chequeo de vida, sin efectos. Es el fallback del consumidor cuando
+`/count_data` no está disponible.
 
-#### `procesarProducto(item)`
-Lógica equivalente a la definida previamente para la cola `productos`.
+**Response:** `200` con cualquier cuerpo.
 
-```javascript
-async function procesarProducto(item) {
-    const knex = require('knex')(config)
-    // validaciones básicas
-    if (!item.name || !item.category_name || !item.branch_id || !item.price) {
-        console.error('Datos incompletos:', item)
-        return false
-    }
-    const { procesar_articulo } = require('./controllers/importar_productos')
-    return await procesar_articulo(item, item.fecha_registro)
-}
-```
-
-#### `procesarOferta(item)`
-Mismo código que antes para la cola `ofertas`, adaptado a la nueva estructura.
-
-```javascript
-async function procesarOferta(item) {
-    const knex = require('knex')(config)
-    if (!item.titulo || !item.branch_id || !item.precio || !item.url) return false
-    // (resto de la lógica permanece igual a la versión anterior)
-    // ...
-}
-```
-
-
-**Nota:** Los ejemplos anteriores están simplificados; el servicio completo debe
-incluír controles de reintentos, timeouts y estadísticas similares a los ya
-especificados en esta documentación.
-
+> El consumidor **nunca** escribe items de prueba para verificar conectividad:
+> un item falso quedaría encolado y lo tomaría él mismo. Si se agregan
+> endpoints de diagnóstico, que sean de solo lectura.
 
 ---
 
-## 🔄 Lógica de Procesamiento
+## 📦 Cola y formato de los items
 
-### Configuración Recomendada
+Existe una **única cola**, `precios`. El tipo de trabajo se distingue por el
+campo `tipo` del item, que el backend agrega antes de encolar:
 
 ```javascript
-// Configuración del procesador
-const CONFIG = {
-    INTERVALO_PROCESAMIENTO: 2000,  // 2 segundos
-    MAX_ITEMS_POR_CICLO: 50,        // 50 items por ciclo
-    REINTENTOS_MAX: 3,              // Reintentos antes de descartar
-    TIMEOUT_ITEM: 30000             // 30 segundos timeout por item
-}
-
-// Worker principal
-setInterval(async () => {
-    // Usamos cola única 'precios' y despachamos según el campo `tipo`
-    await procesarCola('precios', procesarCaso)
-}, CONFIG.INTERVALO_PROCESAMIENTO)
-
-async function procesarCola(clave, procesador) {
-    let procesados = 0
-    
-    while (procesados < CONFIG.MAX_ITEMS_POR_CICLO) {
-        const item = await obtenerDeCola(clave) // LIFO o FIFO
-        if (!item) break
-        
-        try {
-            const exito = await Promise.race([
-                procesador(item),
-                timeout(CONFIG.TIMEOUT_ITEM)
-            ])
-            
-            if (exito) {
-                procesados++
-                console.log(`[${clave}] Item procesado #${procesados}`)
-            } else {
-                // Reintroducir con contador
-                await reintentarItem(clave, item)
-            }
-        } catch (error) {
-            console.error(`[${clave}] Error procesando:`, error)
-            await reintentarItem(clave, item)
-        }
-    }
-    
-    if (procesados > 0) {
-        console.log(`[${clave}] Ciclo finalizado: ${procesados} items procesados`)
-    }
+{
+  tipo: 'producto' | 'oferta' | 'regenerar_precios', // obligatorio
+  fecha_registro: Date|string,                       // obligatorio salvo en regenerar_precios
+  _intentos: Number,                                 // opcional, lo agrega el consumidor
+  // demás propiedades según el tipo
 }
 ```
+
+| `tipo`               | Origen                              | Qué hace el consumidor                                           |
+|----------------------|-------------------------------------|------------------------------------------------------------------|
+| `producto`           | `POST /importar`                    | `procesar_articulo()`: producto, categoría, precio, variación, `price_today` |
+| `oferta`             | `POST /importar_oferta`             | `procesar_oferta()`: valida duplicados y fecha, inserta en `promociones_hoy` |
+| `regenerar_precios`  | `POST /regenerar_price_today`       | Corre `back/scripts/recrear_price_today.js` y reinicia `LAB_PRECIOS` con pm2 |
+
+Un `tipo` desconocido se descarta con log: reintentarlo daría el mismo
+resultado.
+
+### Orden de entrega
+
+El orden entre items es indistinto para el procesamiento (cada item trae su
+`fecha_registro` y la lógica de precios compara contra el último registro
+existente). FIFO es preferible igualmente, para que un item reencolado no vuelva
+a salir en la siguiente petición y la cola avance de forma pareja.
+
+---
+
+## 🔁 Reintentos
+
+Los reintentos los maneja el **consumidor**, no el servicio de colas. El
+servicio no guarda estado por item, así que el contador viaja dentro del propio
+item:
+
+1. El consumidor clasifica el fallo:
+   - **Permanente** (datos del item: campo obligatorio faltante, categoría no
+     especificada, oferta duplicada o anterior a ayer) → se descarta con log.
+   - **Transitorio** (base caída, deadlock, timeout, excepción inesperada) → se
+     reencola.
+2. Al reencolar, incrementa `_intentos` y hace `POST /add_data` con el item.
+3. Al superar `QUEUE_MAX_RETRY` (3 por defecto) el item se descarta con log.
+4. Con fallos transitorios consecutivos el consumidor pausa de forma incremental
+   (`QUEUE_RETRY_BACKOFF` × fallos seguidos, con tope `QUEUE_RETRY_BACKOFF_MAX`)
+   para no drenar la cola entera contra una base que no responde.
+
+Lo único que el servicio de colas debe garantizar es que `/add_data` y
+`/get_data` sean fiables y que el item vuelva a la cola intacto.
 
 ---
 
 ## 🗄️ Persistencia
 
-### Almacenamiento de Colas
-
-El servicio debe implementar persistencia para que:
-- ✅ Los datos NO se pierdan al reiniciar el servicio
-- ✅ Los items pendientes se procesen después del reinicio
+Requisito central: **los items no se pierden al reiniciar el servicio**, y los
+pendientes se siguen entregando después del reinicio.
 
 **Opciones sugeridas:**
 1. **Redis** (recomendado)
-   - Listas: `RPUSH`, `LPOP` para FIFO
+   - Listas: `RPUSH` + `LPOP` para FIFO
    - Persistencia: `appendonly yes`
-   
 2. **Base de datos**
    - Tabla `queue_items` con estado (`pending`, `processing`, `failed`)
-   
 3. **Sistema de archivos**
-   - Archivos JSON por cola
-   - Menos recomendado por concurrencia
+   - Archivos JSON por cola; menos recomendado por concurrencia
+
+Dimensionamiento: la cola tiene que aguantar el pico diario completo sin que el
+consumidor haya empezado a drenar (el scraper puede subir decenas de miles de
+items en minutos, y el consumidor procesa de a uno).
 
 ---
 
 ## 📊 Monitoreo y Logs
 
-### Logs Mínimos Requeridos
+### Logs mínimos
 
 ```javascript
-console.log(`[${clave}] Iniciando procesamiento de la cola`)
-console.log(`[${clave}] Procesando item #${n}`)
-console.log(`[${clave}] Fin de ciclo: ${n} items procesados`)
-console.error(`[${clave}] Error procesando item:`, error)
+console.log(`[${clave}] Item agregado. Pendientes: ${pendientes}`)
+console.log(`[${clave}] Item entregado. Pendientes: ${pendientes}`)
+console.error(`[${clave}] Petición inválida:`, error)
 ```
 
-### Métricas Sugeridas
+### Métricas sugeridas
 
-- Items en cola (por clave)
-- Items procesados (contador total)
-- Items fallidos (contador)
-- Tiempo promedio de procesamiento
-- Último procesamiento exitoso (timestamp)
+- Items en cola (por clave) — la más importante: si crece y no baja, el
+  consumidor está caído o no da abasto
+- Items agregados / entregados (contadores)
+- Timestamp de la última entrega exitosa
 
 ---
 
-## 🔗 Integración con Backend
+## ⚙️ Configuración
 
-### Variables de Entorno del Servicio
+### Variables de entorno del servicio
 
 ```bash
-# Configuración de base de datos (igual que backend)
-mysql_host=localhost
-mysql_user=usuario
-mysql_password=contraseña
-mysql_database=precios_db
-
 # Puerto del servicio
 PORT=3501
 
-# Configuración de colas
-QUEUE_INTERVAL=2000        # Intervalo de procesamiento (ms)
-QUEUE_MAX_ITEMS=50         # Items por ciclo
-QUEUE_RETRY_MAX=3          # Reintentos máximos
+# Persistencia (si se usa Redis)
+REDIS_URL=redis://localhost:6379
 ```
 
-### Dependencias Requeridas
+**No necesita** credenciales de MySQL: no accede a la base.
 
-El servicio debe tener acceso a:
+### Dependencias
 
 ```json
 {
   "dependencies": {
     "express": "^4.18.1",
-    "knex": "^2.3.0",
-    "mysql2": "^3.14.3",
-    "uuid": "^10.0.0",
     "dotenv": "^16.6.1",
-    "redis": "^4.0.0"  // Si se usa Redis
+    "redis": "^4.0.0"
   }
 }
 ```
 
-### Código Compartido
+### Variables del lado del backend y del consumidor
 
-El servicio debe poder importar:
-- `back/controllers/importar_productos.js` → función `procesar_articulo()`
-- `back/controllers/busqueda_productos.js` → actualización de buscador
-- `back/helpers/utils.js` → utilidades
-- Conexión a base de datos (mismo knex config)
-
-**Opción 1:** Copiar archivos necesarios
-**Opción 2:** Compartir mediante symlinks
-**Opción 3:** Convertir en paquete npm compartido
+```bash
+QUEUE_SERVICE_URL=http://localhost:3501   # backend y consumidor
+QUEUE_KEY=precios                         # consumidor
+QUEUE_POLL_INTERVAL=1                     # consumidor
+QUEUE_MAX_RETRY=3                         # consumidor
+QUEUE_RETRY_BACKOFF=5                     # consumidor
+QUEUE_RETRY_BACKOFF_MAX=60                # consumidor
+QUEUE_BACKLOG_LOG_EVERY=100               # consumidor
+```
 
 ---
 
 ## ✅ Checklist de Implementación
 
 ### Básico (MVP)
-- [ ] Endpoint POST /add_data funcionando
-- [ ] Almacenamiento en memoria (array/Map)
-- [ ] Procesamiento con setInterval cada 2s sobre clave `precios`
-- [ ] Despachar a `procesar_articulo()` cuando `tipo === 'producto'`
-- [ ] Despachar a `procesar_oferta()` cuando `tipo === 'oferta'`
-- [ ] Logs básicos de procesamiento
+- [ ] `POST /add_data` funcionando
+- [ ] `GET /get_data` devolviendo y eliminando un item de forma atómica
+- [ ] Almacenamiento en memoria (array/Map) sobre la clave `precios`
+- [ ] `404` cuando la cola está vacía
+- [ ] Logs básicos de alta y entrega
 
 ### Producción
 - [ ] Persistencia (Redis/DB/filesystem)
-- [ ] Manejo de reintentos con límite
-- [ ] Timeout por item (30s)
-- [ ] Logs estructurados
-- [ ] Métricas de procesamiento
-- [ ] Health check endpoint
-- [ ] Limpieza automática de ofertas antiguas
-- [ ] Limpieza automática de estadísticas
-- [ ] Actualización de incremental_stats
-- [ ] Actualización del buscador en tiempo real
+- [ ] `GET /count_data`
+- [ ] `GET /health`
+- [ ] Concurrencia segura en `/get_data` (sin entregas duplicadas)
+- [ ] Logs estructurados y métrica de profundidad de cola
 
 ### Avanzado
 - [ ] Dashboard de monitoreo
-- [ ] Endpoint para consultar estado de colas
-- [ ] Circuit breaker para DB
+- [ ] Alertas por cola saturada (backlog que no baja)
+- [ ] Dead letter queue para items que el consumidor descarta
 - [ ] Rate limiting por clave
-- [ ] Priorización de colas
-- [ ] Dead letter queue para items fallidos
-- [ ] Alertas por colas saturadas
+- [ ] Múltiples colas con prioridad
 
 ---
 
 ## 🧪 Testing
 
-### Test de Integración
-
 ```bash
-# 1. Agregar item
+# 1. Encolar un item
 curl -X POST http://localhost:3501/add_data \
   -H "Content-Type: application/json" \
   -d '{
-    "clave": "productos",
+    "clave": "precios",
     "data": {
+      "tipo": "producto",
       "name": "Test Product",
       "price": 100,
       "branch_id": 1,
@@ -329,20 +290,31 @@ curl -X POST http://localhost:3501/add_data \
     }
   }'
 
-# 2. Verificar logs del servicio
-# Debe mostrar procesamiento automático
+# 2. Verificar que quedó pendiente
+curl "http://localhost:3501/count_data?clave=precios"
 
-# 3. Verificar en base de datos
-# SELECT * FROM price WHERE product_id IN (
-#   SELECT id FROM products WHERE name = 'Test Product'
-# )
+# 3. Retirarlo (con el consumidor Python detenido, si no lo toma él)
+curl "http://localhost:3501/get_data?clave=precios"
+
+# 4. Cola vacía debe dar 404
+curl -i "http://localhost:3501/get_data?clave=precios"
+```
+
+Para probar el procesamiento de punta a punta, dejar el consumidor Python
+corriendo (`extra_services/setup_and_run.sh`), encolar el item del paso 1 y
+verificar en la base:
+
+```sql
+SELECT * FROM price WHERE product_id IN (
+  SELECT id FROM products WHERE name = 'test product'
+);
 ```
 
 ---
 
-## 📞 Contacto
+## 📞 Referencias
 
-Para implementar este servicio, referirse a:
-- **Documentación:** `back/documentacion/servicio_colas_externo.md`
-- **Changelog:** `back/CHANGELOG_servicio_colas.md`
-- **Código fuente:** `back/controllers/importar_productos.js`
+- **Consumidor (procesamiento real):** [`extra_services/actualizar_precios.py`](actualizar_precios.py) — ver [README](README.md)
+- **Integración del backend:** [`back/documentacion/servicio_colas_externo.md`](../back/documentacion/servicio_colas_externo.md)
+- **Changelog:** [`back/CHANGELOG_servicio_colas.md`](../back/CHANGELOG_servicio_colas.md)
+- **Diagnóstico de conectividad:** [`back/DIAGNOSTICO_SERVICIO_COLAS.md`](../back/DIAGNOSTICO_SERVICIO_COLAS.md)

@@ -91,7 +91,7 @@ precios/
 - ✅ **Estadísticas diarias** de incrementos
 
 ### Importación de Datos
-- ✅ Sistema de **cola con procesamiento asíncrono**
+- ✅ Sistema de **cola externa** con **consumidor aparte** (procesa de a un item, sin volcar el volumen diario de golpe)
 - ✅ Soporte de **múltiples plataformas** (Mercado Libre, Region20, etc.)
 - ✅ **Validaciones inteligentes** de datos
 - ✅ **Transaccionalidad** garantizada

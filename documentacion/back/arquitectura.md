@@ -29,8 +29,9 @@ graph TB
         Models["📋 ORM (Knex)"]
     end
     
-    subgraph "Procesos Async"
-        Queue["📋 Cola de Procesamiento"]
+    subgraph "Procesos Externos"
+        Queue["📋 Servicio de Colas<br/>(Node, 3501)"]
+        Consumer["🐍 Consumidor<br/>(actualizar_precios.py)"]
         Scheduler["⏱️ Scheduler 24h"]
     end
     
@@ -41,8 +42,10 @@ graph TB
     Endpoints --> Search
     Endpoints --> Import
     Endpoints --> Stats
-    Import --> Queue
-    Queue --> Cache
+    Import -->|POST /add_data| Queue
+    Queue -->|GET /get_data, 1 item| Consumer
+    Consumer --> DB
+    Consumer -->|/interno/sync_cache| Cache
     Search -.-> Cache
     Endpoints --> Models
     Models --> DB
@@ -90,22 +93,31 @@ GET /publico/busqueda/precios?product_name=leche
   - Actualización dinámica sin regeneración completa
 - **Performance**: O(letras) ≈ Ultra rápido
 
-#### 3.2 Importación de Precios
-- **Archivo**: `controllers/importar_productos.js`
-- **Tipo**: Cola asíncrona con procesamiento
+#### 3.2 Importación de Precios (encolado)
+- **Archivo**: `routes/productos.js` (`agregarACola`)
+- **Tipo**: proxy hacia el servicio de colas externo
 - **Características**:
-  - Validación inteligente
-  - Transaccionalidad
-  - Deduplicación
-  - Cálculo de estadísticas
+  - Valida `KEY_INT` y el formato del lote
+  - Agrega el campo `tipo` a cada item (`producto`, `oferta`, `regenerar_precios`)
+  - Envía un `POST /add_data` por item y responde con el conteo de aceptados
+  - **No** procesa ni escribe en la base durante la importación
 
-#### 3.3 Procesamiento Asíncrono
-- **Archivo**: `helpers/processing.js`
+#### 3.3 Procesamiento Asíncrono (fuera del backend)
+- **Archivo**: `extra_services/actualizar_precios.py` (proceso aparte, Python)
 - **Características**:
-  - Cola en memoria
-  - Procesamiento en ciclos (max 50 items/ciclo)
-  - Re-intento de items fallidos
-  - Callback al vaciar cola
+  - Toma **un item por request** de `GET /get_data` y lo procesa
+  - Ejecuta la lógica de importación: producto, categoría, precio, variación,
+    `price_today`, estadísticas incrementales
+  - Reencola los fallos transitorios (`_intentos`, hasta `QUEUE_MAX_RETRY`) y
+    descarta los permanentes con log
+  - Backoff incremental ante fallos consecutivos (base caída)
+  - Notifica `POST /interno/sync_cache` para refrescar el cache de la API
+- **Por qué de a uno**: el volumen diario es muy alto y cada artículo implica
+  varias consultas; volcarlo de golpe bloquearía tablas que la API pública está
+  leyendo. Ver [servicio de colas externo](../../back/documentacion/servicio_colas_externo.md)
+
+> `helpers/processing.js` (cola en memoria, ciclos de 50 items) quedó sin uso en
+> la importación tras la migración al servicio externo.
 
 ### 4. Capa de Acceso a Datos
 **Localización**: `models/*.js`, `db/`
@@ -172,15 +184,18 @@ Body: { key: KEY_INT, lst_importa: [...] }
    ↓
 Validar clave de seguridad (KEY_INT)
    ↓
-Agregar a colaProcProductos (en memoria)
+Agregar `tipo: "producto"` a cada item
    ↓
-Responder inmediatamente al cliente
+POST {QUEUE_SERVICE_URL}/add_data  (un request por item)
    ↓
-[ASÍNCRONO - en background]
+Responder al cliente: { stat, count } (items encolados)
    ↓
-Worker procesa cola cada 2 segundos
-   ├─ Max 50 items por ciclo
-   └─ Máx 1 error por item (reintenta)
+[ASÍNCRONO - proceso aparte: extra_services/actualizar_precios.py]
+   ↓
+Consumidor Python en bucle:
+   ├─ GET /get_data?clave=precios  → un item por request
+   ├─ Cola vacía → espera 1s y reintenta
+   └─ Fallo transitorio → reencola con _intentos (hasta 3)
    ↓
 Para cada item:
    procesar_articulo(item)
@@ -195,12 +210,13 @@ Para cada item:
    │  └─ Actualizar estructura de búsqueda
    └─ Dentro de transacción (TODO O NADA)
    ↓
-Actualizar contadores globales
+Actualizar contadores globales (cada 10 items)
    ├─ cant_price (total en price)
-   └─ precios_hoy (total en price_today)
+   ├─ precios_hoy (total en price_today)
+   └─ cant_promos (total en promociones_hoy)
    ↓
-Cola vacía → Callback onEmpty
-   └─ [Futuro] Actualizar serie compilada
+Sincronizar cache en memoria de la API
+   └─ POST /interno/sync_cache (x-internal-key)
 ```
 
 ### Flujo 3: Actualización de Precios Actuales (Scheduler 24h)
@@ -293,11 +309,13 @@ estadistica_aumento_diario: registro de cambios de precio
 - Sincronizado con estructura de búsqueda
 - Actualización en batch (chunked)
 
-### 3. Cola Asíncrona
-- No bloquea API en importación masiva
-- Procesamiento en background
+### 3. Cola Externa + Consumidor Aparte
+- No bloquea la API en importación masiva: el backend solo encola
+- El volumen diario (muchísimos artículos) se drena de a un item, sin picos
+  sobre tablas que la API pública está leyendo
+- Los pendientes sobreviven a un reinicio del backend o del consumidor
 - Permite múltiples importaciones simultáneas
-- Reintento automático de errores
+- Reintento de fallos transitorios con backoff, en el consumidor
 
 ### 4. Transaccionalidad
 - Operaciones atómicas

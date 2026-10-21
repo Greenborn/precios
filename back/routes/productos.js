@@ -488,7 +488,7 @@ router.put('/cargar_precios_formulario', async function (req, res) {
 
 // Identificador único de cola (productos + ofertas)
 // cada item llevará un campo `tipo` para distinguir su procesamiento
-const idColaPrecios = "precios"  // valores posibles: 'producto','oferta','accion', etc.
+const idColaPrecios = "precios"  // cola unica; el tipo va en el item: 'producto', 'oferta', 'regenerar_precios'
 
 const TABLAS = {
     "ml": {

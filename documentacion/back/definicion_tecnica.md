@@ -49,7 +49,7 @@ back/
 │   └── Publico.js       (endpoints públicos)
 ├── helpers/             # Utilidades y funciones auxiliares
 │   ├── authorization.js (verificación de acceso)
-│   ├── processing.js    (cola de procesamiento async)
+│   ├── processing.js    (cola en memoria; sin uso tras la cola externa)
 │   └── utils.js         (funciones generales)
 ├── scripts/             # Scripts one-off y procesos
 │   └── actualizar_price_today.js (scheduler 24h)
@@ -86,10 +86,10 @@ TZ=America/Argentina/Buenos_Aires
 # Seguridad
 KEY_INT=tu_clave_secreta_interna
 
-# Importación y Cola
+# Importación y Cola (servicio externo + consumidor Python)
 PRICE_TODAY_CHUNK_SIZE=5000
-QUEUE_WORKER_CYCLE_MS=2000
-QUEUE_MAX_ITEMS_PER_CYCLE=50
+QUEUE_SERVICE_URL=http://localhost:3501   # el backend solo encola aquí
+internal_sync_key=clave_interna_sync      # el consumidor refresca el cache de la API
 
 # Integraciones Externas (opcional)
 SEARCH_SERVICE_ENDPOINT=http://search-service:8000
@@ -323,28 +323,48 @@ function busqueda(termino) {
 
 ## 📥 Sistema de Importación
 
-### Cola Asíncrona
+### Cola Externa + Consumidor Python
+
+El backend **solo encola**. El procesamiento vive en un proceso aparte
+(`extra_services/actualizar_precios.py`), que consume el servicio de colas Node
+pidiendo **un item por request**. El volumen diario es muy alto y cada artículo
+implica varias consultas, así que no se vuelca el lote de golpe en la base: la
+cola amortigua el pico y el consumidor drena al ritmo que la base tolera.
 
 ```javascript
-// helpers/processing.js
-const colaProcProductos = [];
+// back/routes/productos.js — lado backend: encolar y nada más
+async function agregarACola(clave, data) {
+  const response = await axios.post(`${QUEUE_SERVICE_URL}/add_data`,
+    { clave, data }, { timeout: 5000 })
+  return response.data?.success === true
+}
 
-setInterval(() => {
-  if (colaProcProductos.length === 0) return;
-  
-  const items = colaProcProductos.splice(0, MAX_ITEMS_PER_CYCLE);
-  items.forEach(procesar_articulo);
-  
-  if (colaProcProductos.length === 0) emitir_evento('queue:empty');
-}, QUEUE_WORKER_CYCLE_MS);
+// un POST /add_data por item, con el tipo marcado
+const item = { ...rawItem, tipo: 'producto' }
+const success = await agregarACola('precios', item)
+```
+
+```python
+# extra_services/actualizar_precios.py — lado consumidor
+elemento = obtener_elemento_cola(QUEUE_KEY)   # GET /get_data, un item
+if elemento:
+    resultado = procesar_articulo(elemento)   # escribe en MySQL
+    if not resultado['stat'] and not es_error_permanente(resultado['text']):
+        reencolar_elemento(elemento)          # POST /add_data con _intentos + 1
 ```
 
 **Flujo**:
-1. Cliente envía POST → Valida formato → Agrega a cola
-2. Responde 200 inmediatamente
-3. Worker procesa asíncronamente (50 items/ciclo)
+1. Cliente envía POST → valida formato y `KEY_INT` → marca `tipo` → `POST /add_data` por item
+2. Responde 200 con el conteo de items encolados
+3. El consumidor Python toma de a un item (`GET /get_data`); con cola vacía espera 1s
 4. Cada item → transacción completa
-5. Actualiza búsqueda dinámicamente
+5. Actualiza búsqueda y estadísticas, y sincroniza el cache de la API
+   (`POST /interno/sync_cache`)
+6. Fallo transitorio → reencola (hasta `QUEUE_MAX_RETRY`) con backoff; fallo
+   permanente → descarta con log
+
+Detalle completo en
+[servicio_colas_externo.md](../../back/documentacion/servicio_colas_externo.md).
 
 ### Validación de Precios
 
@@ -507,7 +527,7 @@ El proceso de actualización de precios en el backend está diseñado para mante
 - Registro de cada cambio en la tabla `price` (histórico) y actualización de `price_today` (último valor)
 - Cálculo y registro de variaciones porcentuales en `estadistica_aumento_diario`
 - Actualización de estadísticas agregadas
-- Uso de colas y workers para procesamiento batch
+- Cola externa y consumidor Python aparte para absorber el volumen diario sin volcarlo de golpe en la base
 
 ### Puntos fuertes
 - **Historial completo:** Permite trazabilidad y análisis temporal.

@@ -38,7 +38,30 @@ DB_CONFIG = {
 # Configuración del servicio de colas
 QUEUE_SERVICE_URL = os.getenv('QUEUE_SERVICE_URL', 'http://localhost:3501')
 GET_DATA_ENDPOINT = f"{QUEUE_SERVICE_URL}/get_data"
-INTERVALO_VERIFICACION = 1  # 1 segundo
+ADD_DATA_ENDPOINT = f"{QUEUE_SERVICE_URL}/add_data"
+COUNT_DATA_ENDPOINT = f"{QUEUE_SERVICE_URL}/count_data"
+QUEUE_KEY = os.getenv('QUEUE_KEY', 'precios')
+INTERVALO_VERIFICACION = int(os.getenv('QUEUE_POLL_INTERVAL', 1))  # segundos de espera con cola vacia
+
+# Reintentos: un item que falla por una causa transitoria (base caida, deadlock,
+# timeout) se devuelve a la cola en vez de descartarse. El contador de intentos
+# viaja en el propio item (_intentos) porque el servicio de colas no guarda
+# estado por item.
+MAX_REINTENTOS = int(os.getenv('QUEUE_MAX_RETRY', 3))
+PAUSA_ERROR_TRANSITORIO = int(os.getenv('QUEUE_RETRY_BACKOFF', 5))  # segundos
+PAUSA_ERROR_MAXIMA = int(os.getenv('QUEUE_RETRY_BACKOFF_MAX', 60))  # segundos
+# Cada cuantos items procesados se loguea la profundidad de la cola
+INTERVALO_LOG_BACKLOG = int(os.getenv('QUEUE_BACKLOG_LOG_EVERY', 100))
+
+# Motivos de fallo que dependen del contenido del item: reintentarlos no cambia
+# el resultado, asi que el item se descarta sin volver a la cola.
+ERRORES_PERMANENTES = (
+    'es obligatorio',
+    'no se especifica categoria',
+    'no se pudo obtener/crear',
+    'duplicada',
+    'anterior a ayer',
+)
 
 # Configuración de sincronización de cache en memoria del servidor API
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost')
@@ -178,6 +201,75 @@ def obtener_elemento_cola(clave='precios'):
     except requests.exceptions.RequestException as e:
         print(f"Error al obtener elemento de la cola: {e}")
         return None
+
+
+def contar_items_cola(clave=None):
+    """Cantidad de items pendientes en la cola. Devuelve None si el servicio no
+    expone /count_data o no responde."""
+    try:
+        response = requests.get(
+            COUNT_DATA_ENDPOINT,
+            params={'clave': clave or QUEUE_KEY},
+            timeout=5
+        )
+        if response.status_code == 200:
+            return response.json().get('count')
+        return None
+    except (requests.exceptions.RequestException, ValueError):
+        return None
+
+
+def verificar_servicio_colas():
+    """Comprueba que el servicio de colas responda. No escribe en ninguna cola:
+    un item de prueba quedaria encolado y lo tomaria el propio consumidor."""
+    pendientes = contar_items_cola()
+    if pendientes is not None:
+        print(f"✓ Servicio de colas conectado ({pendientes} items pendientes en '{QUEUE_KEY}')")
+        return True
+    try:
+        response = requests.get(f"{QUEUE_SERVICE_URL}/health", timeout=3)
+        if response.ok:
+            print("✓ Servicio de colas conectado")
+            return True
+        print(f"⚠️  El servicio de colas respondió {response.status_code} en /health")
+    except requests.exceptions.RequestException as e:
+        print("⚠️  ADVERTENCIA: No se puede conectar al servicio de colas")
+        print(f"   Error: {e}")
+        print(f"   Asegúrate de que el servicio esté corriendo en {QUEUE_SERVICE_URL}")
+        print("   El script continuará verificando...")
+    return False
+
+
+def es_error_permanente(motivo):
+    """True si el fallo es por los datos del item y no tiene sentido reintentar."""
+    texto = (motivo or '').lower()
+    return any(marca in texto for marca in ERRORES_PERMANENTES)
+
+
+def reencolar_elemento(elemento, clave=None):
+    """Devuelve un item a la cola para reintentarlo mas tarde. Al agotar
+    MAX_REINTENTOS el item se descarta. Devuelve True si quedo reencolado."""
+    intentos = int(elemento.get('_intentos', 0)) + 1
+    if intentos > MAX_REINTENTOS:
+        print(f"✗ Item descartado tras {MAX_REINTENTOS} intento(s): tipo={elemento.get('tipo')}")
+        return False
+
+    item = dict(elemento)
+    item['_intentos'] = intentos
+    try:
+        response = requests.post(
+            ADD_DATA_ENDPOINT,
+            json={'clave': clave or QUEUE_KEY, 'data': item},
+            timeout=5
+        )
+        if response.ok:
+            print(f"↻ Item reencolado (intento {intentos}/{MAX_REINTENTOS})")
+            return True
+        print(f"✗ No se pudo reencolar el item: {response.status_code} - {response.text}")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"✗ No se pudo reencolar el item: {e}")
+        return False
 
 
 def get_categoria(cursor, conexion, articulo):
@@ -764,10 +856,11 @@ def procesar_oferta(oferta):
 
 
 def actualizar_estadisticas():
-    """Actualiza las estadísticas incrementales"""
+    """Actualiza las estadísticas incrementales. Devuelve True si pudo correr."""
     conexion = obtener_conexion()
     if not conexion:
-        return
+        print("⚠️  No se pudieron actualizar las estadísticas: sin conexión a la base")
+        return False
     
     try:
         cursor = conexion.cursor()
@@ -801,10 +894,12 @@ def actualizar_estadisticas():
         conexion.commit()
         cursor.close()
         conexion.close()
+        return True
     except Exception as e:
         print(f"Error al actualizar estadísticas: {e}")
         if conexion and conexion.is_connected():
             conexion.close()
+        return False
 
 
 def main():
@@ -819,34 +914,24 @@ def main():
     
     # Verificar conectividad con el servicio de colas
     print("\n⚙️  Verificando conectividad con servicio de colas...")
-    try:
-        response = requests.get(f"{QUEUE_SERVICE_URL}/health", timeout=3)
-        print("✓ Servicio de colas conectado")
-    except:
-        try:
-            # Intentar con el endpoint add_data
-            response = requests.post(
-                f"{QUEUE_SERVICE_URL}/add_data",
-                json={"clave": "test", "data": {}},
-                timeout=3
-            )
-            print("✓ Servicio de colas respondiendo")
-        except Exception as e:
-            print(f"⚠️  ADVERTENCIA: No se puede conectar al servicio de colas")
-            print(f"   Error: {e}")
-            print(f"   Asegúrate de que el servicio esté corriendo en {QUEUE_SERVICE_URL}")
-            print(f"   El script continuará verificando...")
+    verificar_servicio_colas()
     
     print()
     
     productos_procesados = 0
     ofertas_procesadas = 0
     errores_total = 0
+    reencolados_total = 0
+    descartados_total = 0
+    # Fallos transitorios consecutivos: con la base caida la cola se drenaria
+    # entera perdiendo los items, por eso se pausa de forma incremental
+    fallos_seguidos = 0
+    desde_ultimo_backlog = 0
 
     # Limpieza inicial de price_today (red de seguridad al arrancar)
     try:
-        actualizar_estadisticas()
-        print("✓ Limpieza inicial de price_today / estadistica_aumento_diario completada")
+        if actualizar_estadisticas():
+            print("✓ Limpieza inicial de price_today / estadistica_aumento_diario completada")
     except Exception as e:
         print(f"⚠️  Error en limpieza inicial: {e}")
 
@@ -856,14 +941,16 @@ def main():
         cargar_alias_busqueda(forzar=True)
     except Exception as e:
         print(f"⚠️  Error al cargar alias_busqueda inicial: {e}")
-    
+
     while True:
         try:
-            # Obtener elemento de la cola de productos
-            # Obtener elemento único de la cola
-            elemento = obtener_elemento_cola('precios')
+            # Se toma un unico elemento por peticion: el volumen diario no entra
+            # de golpe en la base, se consume al ritmo que la base tolera
+            elemento = obtener_elemento_cola(QUEUE_KEY)
             if elemento:
                 tipo = elemento.get('tipo')
+                fallo_transitorio = False
+
                 if tipo == 'producto':
                     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Producto obtenido de la cola")
                     print(f"Producto: {elemento.get('name', 'N/A')}")
@@ -871,13 +958,23 @@ def main():
 
                     if resultado['stat']:
                         productos_procesados += 1
+                        fallos_seguidos = 0
                         print(f"✓ Producto procesado (Total: {productos_procesados})")
-                        if productos_procesados % 10 == 0:
-                            actualizar_estadisticas()
+                        if productos_procesados % 10 == 0 and actualizar_estadisticas():
                             print("  → Estadísticas actualizadas")
                     else:
+                        motivo = resultado.get('text', 'Error desconocido')
                         errores_total += 1
-                        print(f"✗ Error al procesar producto: {resultado.get('text', 'Error desconocido')}")
+                        if es_error_permanente(motivo):
+                            descartados_total += 1
+                            print(f"✗ Producto descartado, error permanente: {motivo}")
+                        else:
+                            fallo_transitorio = True
+                            print(f"✗ Error al procesar producto: {motivo}")
+                            if reencolar_elemento(elemento):
+                                reencolados_total += 1
+                            else:
+                                descartados_total += 1
 
                 elif tipo == 'oferta':
                     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Oferta obtenida de la cola")
@@ -886,16 +983,23 @@ def main():
 
                     if resultado['stat']:
                         ofertas_procesadas += 1
+                        fallos_seguidos = 0
                         print(f"✓ Oferta procesada (Total: {ofertas_procesadas})")
-                        if ofertas_procesadas % 10 == 0:
-                            actualizar_estadisticas()
+                        if ofertas_procesadas % 10 == 0 and actualizar_estadisticas():
                             print("  → Estadísticas actualizadas")
                     else:
-                        if 'duplicada' not in resultado.get('text', '').lower() and 'anterior a ayer' not in resultado.get('text', '').lower():
-                            errores_total += 1
-                            print(f"✗ Error al procesar oferta: {resultado.get('text', 'Error desconocido')}")
+                        motivo = resultado.get('text', 'Error desconocido')
+                        if es_error_permanente(motivo):
+                            # oferta duplicada o anterior a ayer: descarte esperado
+                            print(f"⊘ Oferta descartada: {motivo}")
                         else:
-                            print(f"⊘ Oferta descartada: {resultado.get('text', '')}")
+                            errores_total += 1
+                            fallo_transitorio = True
+                            print(f"✗ Error al procesar oferta: {motivo}")
+                            if reencolar_elemento(elemento):
+                                reencolados_total += 1
+                            else:
+                                descartados_total += 1
 
                 elif tipo == 'regenerar_precios':
                     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Tarea regenerar_precios obtenida de la cola")
@@ -919,32 +1023,50 @@ def main():
                             print("Reiniciando servidor con pm2 restart LAB_PRECIOS...")
                             subprocess.run(['pm2', 'restart', 'LAB_PRECIOS'])
                         else:
+                            errores_total += 1
                             print(f"✗ Script finalizó con código {proc.returncode}")
                     except Exception as ex:
+                        errores_total += 1
                         print(f"✗ Error al ejecutar script regenerar_precios: {ex}")
 
                 else:
-                    # tipo desconocido, contar como error y continuar
+                    # tipo desconocido: no se reencola, reintentarlo da lo mismo
                     errores_total += 1
-                    print(f"⚠ Tipo desconocido recibido: {tipo}")
+                    descartados_total += 1
+                    print(f"⚠ Tipo desconocido recibido, item descartado: {tipo}")
+
+                # Profundidad de la cola cada N items, para ver si se acumula atraso
+                desde_ultimo_backlog += 1
+                if INTERVALO_LOG_BACKLOG > 0 and desde_ultimo_backlog >= INTERVALO_LOG_BACKLOG:
+                    desde_ultimo_backlog = 0
+                    pendientes = contar_items_cola()
+                    if pendientes is not None:
+                        print(f"  → Cola '{QUEUE_KEY}': {pendientes} items pendientes")
+
+                if fallo_transitorio:
+                    fallos_seguidos += 1
+                    espera = min(PAUSA_ERROR_TRANSITORIO * fallos_seguidos, PAUSA_ERROR_MAXIMA)
+                    print(f"  → {fallos_seguidos} fallo(s) transitorio(s) seguidos, pausa de {espera}s")
+                    time.sleep(espera)
 
                 # procesar siguiente inmediatamente
                 continue
-            
+
             # Si no obtuvimos ningún elemento, la cola está vacía
-            if not elemento:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Cola vacía, esperando...", end='\r')
-                time.sleep(INTERVALO_VERIFICACION)
-        
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Cola vacía, esperando...", end='\r')
+            time.sleep(INTERVALO_VERIFICACION)
+
         except KeyboardInterrupt:
             print("\n\n" + "=" * 60)
             print("Deteniendo procesador...")
             print(f"Productos procesados: {productos_procesados}")
             print(f"Ofertas procesadas: {ofertas_procesadas}")
+            print(f"Items reencolados: {reencolados_total}")
+            print(f"Items descartados: {descartados_total}")
             print(f"Total errores: {errores_total}")
             print("=" * 60)
             sys.exit(0)
-        
+
         except Exception as e:
             print(f"\n✗ Error inesperado: {e}")
             errores_total += 1
