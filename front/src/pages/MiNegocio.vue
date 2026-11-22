@@ -40,54 +40,17 @@
           Cada local nuevo recibe un código identificador. No se permiten locales duplicados (mismo nombre, dirección y ciudad).
         </p>
 
-        <form class="row g-2 mb-3" @submit.prevent="agregar_local()" novalidate>
-          <div class="col-12 col-md-4">
-            <label for="local_nombre" class="form-label small mb-1">Nombre del local <span class="text-danger" aria-hidden="true">*</span></label>
-            <input id="local_nombre" type="text" class="form-control" v-model="nuevo_local.nombre" required>
+        <div class="row g-3 mb-4">
+          <div v-for="l in locales" :key="l.id" class="col-12 col-xl-6">
+            <LocalCard :local="l" :guardando="guardando_id === l.id"
+                       @guardar="(datos) => guardar_local(l, datos)" @eliminar="eliminar_local(l)" />
           </div>
-          <div class="col-6 col-md-3">
-            <label for="local_calle" class="form-label small mb-1">Calle</label>
-            <input id="local_calle" type="text" class="form-control" v-model="nuevo_local.calle">
+          <div class="col-12 col-xl-6">
+            <LocalCard :guardando="guardandoLocal" @guardar="(datos, limpiar) => agregar_local(datos, limpiar)" />
           </div>
-          <div class="col-6 col-md-1">
-            <label for="local_numero" class="form-label small mb-1">Nro.</label>
-            <input id="local_numero" type="text" class="form-control" v-model="nuevo_local.numero">
-          </div>
-          <div class="col-6 col-md-2">
-            <label for="local_ciudad" class="form-label small mb-1">Ciudad</label>
-            <input id="local_ciudad" type="text" class="form-control" v-model="nuevo_local.ciudad">
-          </div>
-          <div class="col-6 col-md-1">
-            <label for="local_lat" class="form-label small mb-1">Lat.</label>
-            <input id="local_lat" type="text" inputmode="decimal" class="form-control" v-model="nuevo_local.latitud">
-          </div>
-          <div class="col-6 col-md-1">
-            <label for="local_lng" class="form-label small mb-1">Lng.</label>
-            <input id="local_lng" type="text" inputmode="decimal" class="form-control" v-model="nuevo_local.longitud">
-          </div>
-          <div class="col-12 d-flex justify-content-end">
-            <Button type="submit" icon="bi-plus-lg" label="Agregar local" :loading="guardandoLocal" />
-          </div>
-        </form>
-
+        </div>
         <EmptyState v-if="!cargando && !locales.length" size="sm" icon="bi-geo-alt" title="Sin locales"
                     description="Agregá tu primer local para poder cargar precios." />
-
-        <ul class="list-unstyled mb-3" v-if="locales.length">
-          <li v-for="l in locales" :key="l.id" class="d-flex flex-wrap align-items-center justify-content-between gap-2 py-2 border-bottom">
-            <div>
-              <b>{{ l.nombre || 'Sin nombre' }}</b>
-              <span class="gb-text-muted small"> · {{ [l.calle, l.numero, l.ciudad].filter(Boolean).join(' ') || 'Sin dirección' }}</span>
-              <span class="gb-text-muted small d-block">Código: <code>{{ l.codigo || '—' }}</code></span>
-            </div>
-            <div class="d-flex gap-2">
-              <Button size="sm" variant="outline" :label="l.publicado ? 'Ocultar del mapa' : 'Publicar en el mapa'"
-                      @click="alternar_publicado(l)" />
-              <Button size="sm" variant="ghost" severity="danger" icon="bi-trash" :ariaLabel="'Eliminar ' + (l.nombre || 'local')"
-                      @click="eliminar_local(l)" />
-            </div>
-          </li>
-        </ul>
 
         <LocalesMapa :locales="locales" :terminos="TERMINOS_LOCAL" />
       </Card>
@@ -215,6 +178,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
+import LocalCard from '../components/publico/LocalCard.vue'
 import RecorteModal from '../components/publico/RecorteModal.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
@@ -241,7 +205,6 @@ const { locales, cargando, cargar, crear, actualizar, eliminar } = useLocales({ 
 
 const mensajeExito = ref('')
 const guardandoLocal = ref(false)
-const nuevo_local = ref({ nombre: '', calle: '', numero: '', ciudad: '', latitud: '', longitud: '' })
 
 const enviandoPrecios = ref(false)
 const local_precios = ref(null)
@@ -320,28 +283,17 @@ onMounted(async () => {
   obtener_mi_perfil().then((p) => { perfil_id.value = p?.id ?? null }).catch(() => {})
 })
 
-function coordenada(valor) {
-  const s = String(valor ?? '').trim().replace(',', '.')
-  return s === '' ? null : Number(s)
-}
+const guardando_id = ref(null)
 
-async function agregar_local() {
-  const datos = nuevo_local.value
-  if (!String(datos.nombre || '').trim()) {
+async function agregar_local(datos, limpiar) {
+  if (!datos.nombre) {
     storeApp.mostrar_alerta('Debe indicar el nombre del local')
     return
   }
   guardandoLocal.value = true
   try {
-    const creado = await crear({
-      nombre: datos.nombre.trim(),
-      calle: datos.calle.trim() || null,
-      numero: datos.numero.trim() || null,
-      ciudad: datos.ciudad.trim() || null,
-      latitud: coordenada(datos.latitud),
-      longitud: coordenada(datos.longitud),
-    })
-    nuevo_local.value = { nombre: '', calle: '', numero: '', ciudad: '', latitud: '', longitud: '' }
+    const creado = await crear(datos)
+    limpiar?.()
     if (!local_precios.value) local_precios.value = creado.id
     mensajeExito.value = `Local creado. Código: ${creado.codigo || '—'}`
   } catch (err) {
@@ -351,11 +303,19 @@ async function agregar_local() {
   }
 }
 
-async function alternar_publicado(local) {
+async function guardar_local(local, datos) {
+  if (!datos.nombre) {
+    storeApp.mostrar_alerta('Debe indicar el nombre del local')
+    return
+  }
+  guardando_id.value = local.id
   try {
-    await actualizar(local.id, { publicado: !local.publicado })
+    await actualizar(local.id, datos)
+    mensajeExito.value = 'Local actualizado'
   } catch (err) {
-    storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo cambiar la publicación'))
+    storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo guardar el local'))
+  } finally {
+    guardando_id.value = null
   }
 }
 
