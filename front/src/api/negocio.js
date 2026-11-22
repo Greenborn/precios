@@ -52,3 +52,7 @@ export function url_absoluta_backend(ruta) {
 export function obtener_mi_perfil() {
   return http.get('/api/perfil/mi-perfil').then((r) => r.data)
 }
+
+export function listar_mis_precios({ limit = 50, offset = 0 } = {}) {
+  return http.get('/api/negocio/mis-precios', { params: { limit, offset } }).then((r) => r.data)
+}

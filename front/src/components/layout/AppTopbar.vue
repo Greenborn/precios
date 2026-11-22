@@ -45,6 +45,9 @@
           <router-link v-if="ruta_cuenta" :to="ruta_cuenta" class="app-topbar__dd-item" role="menuitem" @click="menu_abierto = false">
             <Icon name="bi-person-gear" /> Mi cuenta
           </router-link>
+          <router-link to="/mi-negocio" class="app-topbar__dd-item" role="menuitem" @click="menu_abierto = false">
+            <Icon name="bi-shop-window" /> Mi negocio
+          </router-link>
           <button type="button" class="app-topbar__dd-item app-topbar__dd-item--danger" role="menuitem" @click="cerrar_sesion">
             <Icon name="bi-box-arrow-right" /> Cerrar sesión
           </button>

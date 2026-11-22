@@ -148,6 +148,40 @@ router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion, as
   }
 })
 
+// ---------- Mis precios (listado privado) ----------
+//   GET /api/negocio/mis-precios?limit&offset -> último precio por producto y local propios
+router.get('/negocio/mis-precios', sesion, async (req, res) => {
+  try {
+    const locales = await knex('branch').where({ propietario_id: req.user.id }).orderBy('id').select('id', 'branch_name')
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200)
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
+    const branchIds = locales.map((l) => l.id)
+    if (!branchIds.length) return res.json({ total: 0, limit, offset, items: [] })
+
+    const nombres = new Map(locales.map((l) => [String(l.id), l.branch_name]))
+    const base = require('../controllers/precios_negocio').consulta_ultimos_precios(knex, branchIds)
+    const [{ n: total }] = await knex.count('* as n').from(base.clone().as('t'))
+    const filas = await base.clone()
+      .orderBy('products.name').orderBy('price.branch_id').orderBy('price.id')
+      .limit(limit).offset(offset)
+
+    res.json({
+      total: Number(total), limit, offset,
+      items: filas.map((f) => ({
+        producto_id: f.product_id,
+        producto: f.product_name,
+        precio: Number(f.price),
+        fecha: f.date_time,
+        local_id: Number(f.branch_id),
+        local: nombres.get(String(f.branch_id)) || null,
+      })),
+    })
+  } catch (err) {
+    console.error('[negocio] GET mis-precios', err)
+    res.status(500).json({ error: 'No se pudieron obtener los precios' })
+  }
+})
+
 // ---------- Ficha pública del negocio (sin login) ----------
 //   GET /api/negocio/publico/:perfilId/locales                -> locales publicados del negocio
 //   GET /api/negocio/publico/:perfilId/productos?limit&offset -> último precio por producto y local

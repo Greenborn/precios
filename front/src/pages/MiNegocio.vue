@@ -19,12 +19,12 @@
       </div>
 
       <!-- 1. Perfil -->
-      <Card title="1. Perfil del negocio" icon="bi-person-vcard" class="mb-4">
+      <Card id="seccion-perfil" title="1. Perfil del negocio" icon="bi-person-vcard" class="mb-4">
         <PerfilEditor :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
       </Card>
 
       <!-- 2. Locales -->
-      <Card title="2. Mis locales" icon="bi-geo-alt" class="mb-4">
+      <Card id="seccion-locales" title="2. Mis locales" icon="bi-geo-alt" class="mb-4">
         <p class="gb-text-muted small mb-3">
           Cada local nuevo recibe un código identificador. No se permiten locales duplicados (mismo nombre, dirección y ciudad).
         </p>
@@ -82,7 +82,7 @@
       </Card>
 
       <!-- 3. Precios de mi negocio -->
-      <Card title="3. Cargar precios de mis artículos" icon="bi-basket" class="mb-4">
+      <Card id="seccion-precios" title="3. Cargar precios de mis artículos" icon="bi-basket" class="mb-4">
         <form @submit.prevent="enviar_precios()" novalidate>
           <div class="row g-3 mb-3">
             <div class="col-12 col-md-7">
@@ -137,19 +137,42 @@
           </div>
         </form>
       </Card>
+
+      <!-- 4. Listado de precios -->
+      <Card id="seccion-listado" title="4. Mis precios cargados" icon="bi-list-ul" class="mb-4">
+        <EmptyState v-if="!cargandoPrecios && !mis_precios.length" size="sm" icon="bi-basket" title="Sin precios"
+                    description="Todavía no cargaste precios." />
+        <div v-else class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead><tr><th>Artículo</th><th>Local</th><th class="text-end">Precio</th><th>Fecha</th></tr></thead>
+            <tbody>
+              <tr v-for="p in mis_precios" :key="p.local_id + '-' + p.producto_id">
+                <td>{{ p.producto }}</td>
+                <td>{{ p.local || '—' }}</td>
+                <td class="text-end gb-num">$ {{ p.precio.toLocaleString('es-AR') }}</td>
+                <td>{{ p.fecha ? String(p.fecha).slice(0, 10) : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="mis_precios.length < total_precios" class="text-center">
+          <Button variant="outline" label="Ver más" :loading="cargandoPrecios" @click="cargar_mis_precios()" />
+        </div>
+      </Card>
     </div>
   </main>
   <PublicFooter />
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
 import { PerfilEditor } from '@greenborn/vue-greenborn-perfil'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil } from '../api/negocio'
+import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -181,8 +204,32 @@ function mensaje_error(err, por_defecto = 'Ocurrió un error, reintente luego') 
   return err?.response?.data?.error || err?.response?.data?.message || por_defecto
 }
 
+const route = useRoute()
+const mis_precios = ref([])
+const total_precios = ref(0)
+const cargandoPrecios = ref(false)
+
+async function cargar_mis_precios(reiniciar = false) {
+  if (reiniciar) mis_precios.value = []
+  cargandoPrecios.value = true
+  try {
+    const r = await listar_mis_precios({ offset: mis_precios.value.length })
+    mis_precios.value.push(...(r.items || []))
+    total_precios.value = r.total || 0
+  } catch (err) {
+    storeApp.mostrar_alerta(mensaje_error(err, 'No se pudieron obtener los precios'))
+  } finally {
+    cargandoPrecios.value = false
+  }
+}
+
 const perfil_id = ref(null)
-onMounted(() => {
+onMounted(async () => {
+  cargar_mis_precios(true)
+  nextTick(() => {
+    const seccion = route.query.seccion
+    if (seccion) document.getElementById('seccion-' + seccion)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
   cargar()
   obtener_mi_perfil().then((p) => { perfil_id.value = p?.id ?? null }).catch(() => {})
 })
@@ -328,6 +375,7 @@ async function enviar_precios() {
     if (fotos_err) texto += `. Fotos con error: ${fotos_err}`
     mensajeExito.value = texto
     filas.value = [filas_vacia()]
+    cargar_mis_precios(true)
   } catch (err) {
     storeApp.mostrar_alerta(mensaje_error(err, 'Error al enviar los precios'))
   } finally {

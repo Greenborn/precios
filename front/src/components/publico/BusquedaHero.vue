@@ -24,7 +24,7 @@
 
     <div class="pub-hero__stats" v-if="estadisticas?.length">
       <div class="pub-hero__stat" v-for="e in estadisticas.slice(0, 4)" :key="e.description">
-        <span class="pub-hero__stat-value gb-num">{{ e.value }}</span>
+        <span class="pub-hero__stat-value gb-num">{{ formatear(e.value) }}</span>
         <span class="pub-hero__stat-label">{{ e.description }}</span>
       </div>
     </div>
@@ -39,6 +39,11 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'buscar'])
 const sugerencias = ['Yerba', 'Leche', 'Arroz', 'Aceite', 'Harina']
+function formatear(v){
+  const n = Number(v)
+  if (v === null || v === '' || !Number.isFinite(n)) return v
+  return n.toLocaleString('de-DE', { maximumFractionDigits: 2 })
+}
 function elegir(s){
   emit('update:modelValue', s)
   emit('buscar')
