@@ -16,6 +16,9 @@ function params_busqueda( termino, paginado ) {
 export function busqueda( termino, paginado ) {
   return request({ url: '/publico/busqueda/precios?'+params_busqueda(termino, paginado), method: 'get' })
 }
+export function sugerencias_busqueda( q ) {
+  return request({ url: '/publico/busqueda/sugerencias?q='+encodeURIComponent(q), method: 'get' })
+}
 export function busqueda_promociones( termino, paginado ) {
   return request({ url: '/publico/busqueda/promociones?'+params_busqueda(termino, paginado), method: 'get' })
 }

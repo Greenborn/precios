@@ -187,6 +187,18 @@ function paginar(items, query) {
   return { items: pag_items, total, pagina, hay_mas: desde + cantidad < total }
 }
 
+router.get('/sugerencias', function (req, res) {
+  try {
+    const q = utils.limpiarTexto(String(req?.query?.q || ''))
+    if (q.length < LIMITE_MIN_CARACTERES)
+      return res.status(200).send({ stat: true, items: [] })
+    res.status(200).send({ stat: true, items: busqueda_productos.sugerencias(q, 8) })
+  } catch (error) {
+    console.log(error)
+    res.status(200).send({ stat: false, items: [] })
+  }
+})
+
 router.get('/precios', async function (req, res) {
   try {
     let product_name = utils.limpiarTexto(String(req?.query?.product_name || ''))

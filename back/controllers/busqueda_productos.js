@@ -185,3 +185,23 @@ exports.busqueda = async function( termino, limit = -1 ) {
         'user_apellido':e.user_apellido
     }))
 }
+
+// Sugerencias de autocompletado: nombres distintos que contienen todas las palabras
+// del término. Primero los que empiezan con el término, luego los demás (por largo).
+exports.sugerencias = function( termino, limit = 8 ) {
+    const norm = normalizar(termino)
+    const palabras = [...new Set(norm.split(' ').filter(p => p.length > 0))]
+    if (palabras.length === 0) return []
+    const vistos = new Map()   // nameLower -> { nombre, empieza }
+    const todo = lista()
+    for (let i = 0; i < todo.length; i++) {
+        const e = todo[i]
+        if (vistos.has(e.nameLower)) continue
+        if (palabras.every(w => e.nameLower.includes(w)))
+            vistos.set(e.nameLower, { nombre: e.name, empieza: e.nameLower.startsWith(norm) })
+    }
+    return [...vistos.values()]
+        .sort((a, b) => (b.empieza - a.empieza) || (a.nombre.length - b.nombre.length))
+        .slice(0, limit)
+        .map(v => v.nombre)
+}
