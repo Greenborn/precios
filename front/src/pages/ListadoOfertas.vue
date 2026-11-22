@@ -200,6 +200,13 @@
         comercios_filtrados.value = aux
     }
 
+    // Clave de agrupación: nombre del comercio sin mayúsculas, tildes ni espacios sobrantes
+    function claveComercio(nombre, respaldo){
+        const n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                    .toLowerCase().replace(/\s+/g, ' ').trim()
+        return n || String(respaldo)
+    }
+
     function encontrado( string1, string2 ){
         if (string2=='') return true
 
@@ -237,7 +244,11 @@
                 storeApp.mostrar_alerta( "No se pudieron obtener los comercios" )
                 return false
             }
-            listado_comercios.value = res_comercios?.items
+            // Un comercio con varias sucursales/duplicados se muestra una sola vez (clave = nombre)
+            const vistos = new Set()
+            listado_comercios.value = (res_comercios?.items || [])
+                .map(c => ({ ...c, branch_id: claveComercio(c.name, c.branch_id) }))
+                .filter(c => !vistos.has(c.branch_id) && vistos.add(c.branch_id))
             listado_comercios.value.sort( (a, b) => (a?.name > b?.name) ? 1 : -1 )
         }
 
@@ -252,17 +263,24 @@
             }
             listado_promo_obtenido.value = res?.items
             for (let i=0; i < listado_promo_obtenido.value.length; i++){
-                const ID_COMERCIO = listado_promo_obtenido.value[i].branch_id
+                const oferta_ = listado_promo_obtenido.value[i]
+                const ID_COMERCIO = claveComercio(oferta_.empresa?.name, oferta_.branch_id)
                 if (listado_por_comercio.value[ID_COMERCIO] === undefined){
                     listado_por_comercio.value[ID_COMERCIO] = {
                         "ofertas": []
                     }
                     listado_empresas.value.push({
                         "id":      ID_COMERCIO,
-                        "empresa": listado_promo_obtenido.value[i].empresa,
-                        "locales": listado_promo_obtenido.value[i].locales,
+                        "empresa": oferta_.empresa,
+                        "locales": [...(oferta_.locales || [])],
                     })
                     params_filtro.value.comercio[ID_COMERCIO] = true
+                } else {
+                    // mismo comercio en otra sucursal: se suman sus locales sin repetir
+                    const emp = listado_empresas.value.find(e => e.id === ID_COMERCIO)
+                    for (const l of (oferta_.locales || [])){
+                        if (!emp.locales.some(x => JSON.stringify(x) === JSON.stringify(l))) emp.locales.push(l)
+                    }
                 }
                 listado_por_comercio.value[ID_COMERCIO].ofertas.push(listado_promo_obtenido.value[i])
             }

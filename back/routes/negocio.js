@@ -217,6 +217,7 @@ router.get('/negocio/publico/:perfilId/productos', async (req, res) => {
     const filas = await base.clone()
       .orderBy('products.name')
       .orderBy('price.branch_id')
+      .orderBy('price.id')
       .limit(limit)
       .offset(offset)
 

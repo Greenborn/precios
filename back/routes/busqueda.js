@@ -147,7 +147,6 @@ function inicio_de_ayer() {
 
 const CANTIDAD_DEFECTO = 30
 const CANTIDAD_MAX = 100
-const ORDENES = ['relevancia', 'precio_asc', 'precio_desc']
 
 // Completa empresa y locales solo para los ítems que se devuelven
 function enriquecer(items) {
@@ -162,8 +161,9 @@ function enriquecer(items) {
 }
 
 function ordenar(items, orden) {
-  if (orden === 'relevancia' || !ORDENES.includes(orden)) return items
-  const f = orden === 'precio_asc' ? 1 : -1
+  // Sin orden (o inválido) el criterio por defecto es el menor precio, igual que el front
+  if (orden === 'relevancia') return items
+  const f = orden === 'precio_desc' ? -1 : 1
   return [...items].sort((a, b) => {
     const pa = Number(a?.price), pb = Number(b?.price)
     if (pa == -1) return 1

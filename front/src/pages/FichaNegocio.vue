@@ -10,6 +10,9 @@
       <EmptyState v-if="noEncontrado" icon="bi-shop" title="Negocio no encontrado"
                   description="El enlace no corresponde a un negocio publicado." />
 
+      <EmptyState v-else-if="errorPerfil" icon="bi-exclamation-triangle" title="No se pudo cargar el negocio"
+                  description="Ocurrió un error al cargar la ficha. Probá de nuevo en unos minutos." />
+
       <template v-else>
         <!-- 1. Perfil -->
         <Card title="Perfil" icon="bi-person-vcard" class="mb-4">
@@ -32,7 +35,7 @@
         <!-- 3. Productos -->
         <Card title="Productos y precios" icon="bi-basket" class="mb-4">
           <p class="gb-text-muted small mb-3" v-if="productos.total">
-            {{ productos.total }} {{ productos.total === 1 ? 'producto' : 'productos' }} cargados por este negocio.
+            {{ productos.total }} {{ productos.total === 1 ? 'precio cargado' : 'precios cargados' }} por este negocio.
           </p>
           <EmptyState v-if="!cargandoProductos && !productos.items.length" size="sm" icon="bi-basket" title="Sin productos"
                       description="Todavía no se cargaron precios para este negocio." />
@@ -96,6 +99,7 @@ const perfil = ref(null)
 const locales = ref([])
 const productos = ref({ total: 0, items: [] })
 const noEncontrado = ref(false)
+const errorPerfil = ref(false)
 const cargandoPerfil = ref(false)
 const cargandoLocales = ref(false)
 const cargandoProductos = ref(false)
@@ -112,9 +116,11 @@ function formatear_fecha(valor) {
 }
 
 async function cargar_productos() {
+  const id = perfilId.value
   cargandoProductos.value = true
   try {
-    const res = await listar_productos_publicos_negocio(perfilId.value, { limit: PAGINA, offset: productos.value.items.length })
+    const res = await listar_productos_publicos_negocio(id, { limit: PAGINA, offset: productos.value.items.length })
+    if (id !== perfilId.value) return // llegó tarde: se navegó a otro negocio
     productos.value = { total: res.total, items: [...productos.value.items, ...res.items] }
   } catch {
     // Si falla, se mantiene lo ya cargado y el botón "Cargar más" sigue disponible
@@ -126,24 +132,30 @@ async function cargar_productos() {
 async function cargar_ficha(id) {
   perfilId.value = id
   noEncontrado.value = false
+  errorPerfil.value = false
   perfil.value = null
   locales.value = []
   productos.value = { total: 0, items: [] }
   cargandoPerfil.value = true
+  let datos
   try {
-    perfil.value = await obtener_perfil_publico(id)
+    datos = await obtener_perfil_publico(id)
   } catch (err) {
+    if (id !== perfilId.value) return
     if (err?.response?.status === 404) noEncontrado.value = true
+    else errorPerfil.value = true
     cargandoPerfil.value = false
     return
   }
+  if (id !== perfilId.value) return
+  perfil.value = datos
   cargandoPerfil.value = false
 
   cargandoLocales.value = true
   listar_locales_publicos_negocio(id)
-    .then((l) => { locales.value = l })
+    .then((l) => { if (id === perfilId.value) locales.value = l })
     .catch(() => {})
-    .finally(() => { cargandoLocales.value = false })
+    .finally(() => { if (id === perfilId.value) cargandoLocales.value = false })
   await cargar_productos()
 }
 

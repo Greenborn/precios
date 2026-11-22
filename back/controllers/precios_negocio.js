@@ -47,6 +47,14 @@ function consulta_ultimos_precios(knex, ids) {
     })
     .join('products', 'products.id', 'price.product_id')
     .whereIn('price.branch_id', ids)
+    // Desempate: si hay dos precios con la misma date_time, se queda solo el de mayor id
+    .whereNotExists(function () {
+      this.select(knex.raw('1')).from('price as p2')
+        .whereRaw('p2.product_id = price.product_id')
+        .whereRaw('p2.branch_id = price.branch_id')
+        .whereRaw('p2.date_time = price.date_time')
+        .whereRaw('p2.id > price.id')
+    })
     .select(
       'price.id as id',
       'price.id as price_id',

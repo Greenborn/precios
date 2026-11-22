@@ -115,9 +115,8 @@ const buscando = ref(false)
 const buscado = ref(false)
 const resultadosRef = ref(null)
 const centinelaRef = ref(null)
-const orden = ref('relevancia')
+const orden = ref('precio_asc')
 const ORDENES = [
-    { id: 'relevancia', label: 'Relevancia', icon: 'bi-stars' },
     { id: 'precio_asc', label: 'Menor precio', icon: 'bi-sort-numeric-down' },
     { id: 'precio_desc', label: 'Mayor precio', icon: 'bi-sort-numeric-up' }
 ]
@@ -205,7 +204,7 @@ async function buscar ( termino = undefined ) {
         return false
     }
 
-    orden.value = 'relevancia'
+    orden.value = 'precio_asc'
     buscado.value = true
     const ok = await cargarPagina(1)
     if (ok) {
