@@ -58,10 +58,7 @@
                 <div v-if="storeApp.userInfo?.email" class="pub-topbar__dd-mail">{{ storeApp.userInfo.email }}</div>
               </div>
               <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('negocio')">
-                <Icon name="bi-shop-window" /> Mi negocio
-              </button>
-              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('precios')">
-                <Icon name="bi-basket" /> Mis precios
+                <Icon name="bi-shop-window" /> Perfil Comercial
               </button>
               <button v-if="esAdmin" type="button" class="pub-topbar__dd-item" role="menuitem" @click="irDashboard">
                 <Icon name="bi-speedometer2" /> Panel de administración

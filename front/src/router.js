@@ -38,6 +38,11 @@ export const routes = [
     component: () => import("./pages/PoliticaPrivacidad.vue"),
   },
   {
+    path: "/ayuda/negocios",
+    name: "ayuda_negocios",
+    component: () => import("./pages/AyudaNegocio.vue"),
+  },
+  {
     path: "/uso-de-datos",
     name: "uso_datos",
     component: () => import("./pages/UsoDatos.vue"),
