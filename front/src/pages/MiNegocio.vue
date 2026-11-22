@@ -21,7 +21,7 @@
       <!-- 1. Perfil -->
       <Card id="seccion-perfil" title="1. Perfil del negocio" icon="bi-person-vcard" class="mb-4">
         <CabeceraNegocio editable class="mb-4" />
-        <PerfilEditor :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
+        <PerfilNegocioForm :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
       </Card>
 
       <!-- 2. Locales -->
@@ -179,7 +179,7 @@ import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
 import RecorteModal from '../components/publico/RecorteModal.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
-import { PerfilEditor } from '@greenborn/vue-greenborn-perfil'
+import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
 import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'

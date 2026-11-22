@@ -18,7 +18,13 @@
         <!-- 1. Perfil -->
         <Card title="Perfil" icon="bi-person-vcard" class="mb-4">
           <EmptyState v-if="cargandoPerfil" size="sm" icon="bi-hourglass-split" title="Cargando perfil" />
-          <PerfilPublico v-else :perfil="perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
+          <dl v-else-if="campos_visibles.length" class="row mb-0">
+            <template v-for="c in campos_visibles" :key="c.nombre">
+              <dt class="col-sm-4 col-md-3 text-muted fw-semibold">{{ c.etiqueta }}</dt>
+              <dd class="col-sm-8 col-md-9">{{ perfil[c.nombre] }}</dd>
+            </template>
+          </dl>
+          <EmptyState v-else size="sm" icon="bi-person-vcard" title="Sin datos publicados" />
         </Card>
 
         <!-- 2. Locales -->
@@ -69,12 +75,11 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
-import { PerfilPublico } from '@greenborn/vue-greenborn-perfil'
 import { LocalesMapa } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
 import {
@@ -96,6 +101,8 @@ const TERMINOS_LOCAL = { singular: 'local', plural: 'locales' }
 const PAGINA = 50
 
 const route = useRoute()
+const campos_visibles = computed(() =>
+  CAMPOS_PERFIL.filter((c) => perfil.value && perfil.value[c.nombre] != null && perfil.value[c.nombre] !== ''))
 const perfilId = ref(null)
 const perfil = ref(null)
 const locales = ref([])
