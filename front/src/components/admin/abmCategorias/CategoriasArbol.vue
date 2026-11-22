@@ -8,9 +8,20 @@
       texto-vacio="No hay categorías"
       texto-sin-hijos="Sin subcategorías"
       @seleccionar="onSeleccionar">
-      <template #nodo="{ nodo }">
+      <template #nodo="{ nodo, nivel, abierto }">
+        <span class="nodo-icono" :class="'nodo-icono--n' + Math.min(nivel || 0, 3)" aria-hidden="true">
+          <Icon :name="icono_nodo(nodo, nivel, abierto)" />
+        </span>
         <span class="nodo-nombre">{{ nodo.name }}</span>
-        <span class="badge bg-secondary ms-2">{{ nodo.cant_productos }} prod.</span>
+        <Badge class="nodo-badge" tone="neutral" size="sm" pill>
+          <span class="gb-num">{{ nodo.cant_productos }}</span> prod.
+        </Badge>
+        <span v-if="acciones" class="nodo-acciones">
+          <Button icon="pi-pencil" text rounded size="sm" :ariaLabel="'Editar ' + nodo.name" title="Editar" @click.stop="emit('accion', { accion: 'editar', nodo })" />
+          <Button icon="pi-list" text rounded size="sm" :ariaLabel="'Productos de ' + nodo.name" title="Productos" @click.stop="emit('accion', { accion: 'productos', nodo })" />
+          <Button icon="pi-tag" text rounded size="sm" :ariaLabel="'Alias de ' + nodo.name" title="Alias" @click.stop="emit('accion', { accion: 'alias', nodo })" />
+          <Button icon="pi-trash" severity="danger" text rounded size="sm" :ariaLabel="'Borrar ' + nodo.name" title="Borrar" @click.stop="emit('accion', { accion: 'borrar', nodo })" />
+        </span>
       </template>
     </GbTreeView>
   </div>
@@ -18,11 +29,19 @@
 
 <script setup>
   import { ref } from 'vue'
-  import { GbTreeView } from 'vue-greenborn-tree-view'
-  import 'vue-greenborn-tree-view/style.css'
+  import { GbTreeView } from '@greenborn/vue-greenborn-tree-view'
+  import '@greenborn/vue-greenborn-tree-view/style.css'
   import { arbol } from '@/api/admin/categorias'
 
-  const emit = defineEmits(['rowSelected'])
+  const emit = defineEmits(['rowSelected', 'accion'])
+  // acciones: muestra botones on-hover por nodo (emite 'accion'); opcional.
+  defineProps({ acciones: { type: Boolean, default: false } })
+
+  function icono_nodo(nodo, nivel, abierto) {
+    if (!nivel) return abierto ? 'bi-folder2-open' : 'bi-folder-fill'
+    if (nodo.tiene_hijos) return abierto ? 'bi-folder2-open' : 'bi-folder'
+    return 'bi-tag'
+  }
 
   const arbol_ref = ref()
   const filtro = ref('')
@@ -54,14 +73,49 @@
 
 <style scoped>
   .categorias-arbol {
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    border-radius: 0.375rem;
-    padding: 0.5rem;
+    padding: var(--gb-space-2);
     overflow-y: auto;
     width: 100%;
   }
 
+  .categorias-arbol :deep(.gb-tree-view__fila) {
+    border-radius: var(--gb-radius-sm);
+    padding-block: 0.3rem;
+    transition: background-color var(--gb-transition-fast);
+  }
+  .categorias-arbol :deep(.gb-tree-view__fila:hover) { background: var(--gb-surface-2); }
+  .categorias-arbol :deep(.gb-tree-view__fila--seleccionado),
+  .categorias-arbol :deep(.gb-tree-view__fila--seleccionado:hover) {
+    background: var(--gb-primary-soft);
+    box-shadow: inset 3px 0 0 var(--gb-primary);
+  }
+  .categorias-arbol :deep(.gb-tree-view__contenido) {
+    display: flex; align-items: center; gap: var(--gb-space-2); flex: 1; min-width: 0;
+  }
+
+  .nodo-icono { display: inline-flex; font-size: 1rem; }
+  .nodo-icono--n0 { color: var(--gb-primary); }
+  .nodo-icono--n1 { color: var(--gb-accent); }
+  .nodo-icono--n2 { color: var(--gb-info); }
+  .nodo-icono--n3 { color: var(--gb-text-muted); }
+
   .nodo-nombre {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--gb-text);
   }
+
+  .nodo-acciones {
+    display: inline-flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--gb-transition-fast);
+  }
+  .categorias-arbol :deep(.gb-tree-view__fila:hover) .nodo-acciones,
+  .categorias-arbol :deep(.gb-tree-view__fila:focus-within) .nodo-acciones,
+  .categorias-arbol :deep(.gb-tree-view__fila--seleccionado) .nodo-acciones { opacity: 1; }
+  @media (hover: none) { .nodo-acciones { opacity: 1; } }
 </style>

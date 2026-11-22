@@ -1,100 +1,94 @@
 <template>
     <PublicTopBar @filtrar_evnt="desplegar_filtros"/>
 
-    <div class="container-fluid" id="ofertas-cnt">
-        <div class="row align-items-center justify-content-center">
-            <div class="col-12 col-md-10 col-lg-8">
-                <h2 class="text-center pt-2">Listado de Promociones y Ofertas</h2>
+    <main class="pub-main" id="ofertas-cnt">
+      <div class="pub-container">
+        <PageHeader title="Promociones y ofertas" icon="bi-lightning-charge"
+                    subtitle="Ofertas vigentes de comercios locales, ordenadas de menor a mayor precio."
+                    :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Ofertas' }]">
+            <template #actions>
+                <Button label="Filtros avanzados" icon="bi-sliders" variant="outline" @click="desplegar_filtros" />
+            </template>
+        </PageHeader>
+
+        <button type="button" class="btn btn-outline-secondary w-100 mb-3 pub-filter-toggle"
+                :aria-expanded="filtrosAbiertos ? 'true' : 'false'" aria-controls="ofertas-filtros"
+                @click="filtrosAbiertos = !filtrosAbiertos">
+            <Icon name="bi-funnel" /> {{ filtrosAbiertos ? 'Ocultar filtros' : 'Mostrar filtros' }}
+        </button>
+
+        <div id="ofertas-filtros" class="pub-filters mb-4" :class="{ 'is-open': filtrosAbiertos }">
+            <form class="pub-search pub-search--inline mb-3" role="search" @submit.prevent="aplicarBusqueda">
+                <Icon name="bi-search" class="pub-search__icon" />
+                <label for="ofertas-busqueda" class="visually-hidden">Buscar en ofertas</label>
+                <input id="ofertas-busqueda" class="pub-search__input" type="search" v-model="busquedaNombre"
+                       placeholder="Buscar producto en ofertas" @input="aplicarBusqueda">
+            </form>
+            <div class="pub-chips" role="group" aria-label="Filtrar por comercio">
+                <button type="button" class="pub-chip" :aria-pressed="comercioActivo === null ? 'true' : 'false'"
+                        @click="elegirComercio(null)">Todos</button>
+                <button v-for="e in listado_empresas" :key="e.id" type="button" class="pub-chip"
+                        :aria-pressed="comercioActivo === e.id ? 'true' : 'false'" @click="elegirComercio(e.id)">
+                    {{ e?.empresa?.name }}
+                </button>
             </div>
         </div>
 
-        <div class="row align-items-center justify-content-center d-none d-sm-flex">
-            <div class="col-auto">
-                <Button label="Filtrar" iconPos="right" 
-                        @click="desplegar_filtros" />
-            </div>
+        <div v-if="cargando" class="pub-grid">
+            <div v-for="n in 6" :key="n" class="pub-price-card"><Skeleton width="50%" height="1.4rem" /><Skeleton :lines="5" /></div>
         </div>
 
-        <div class="row align-items-stretch justify-content-center g-3 mt-2">
-            <div class="col-12 col-md-6 col-lg-4" v-for="(comercio, index) in comercios_filtrados" :key="comercio">
-                <div class="card rounded-0 h-100 shadow-sm card-ofertas p-0">
-                    <div class="card-header bg-primary text-white">
-                        <b>{{ comercio?.empresa?.name }}</b>
-                        <span class="badge bg-light text-dark ms-2">{{ ofertas_filtradas[String(comercio.id)] && ofertas_filtradas[String(comercio.id)].ofertas?.length }} ofertas</span>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush position-relative">
-                            <li class="list-group-item oferta-item" 
-                                v-for="(oferta, idx) in (ofertas_filtradas[String(comercio.id)] && ofertas_filtradas[String(comercio.id)].ofertas ? ofertas_filtradas[String(comercio.id)].ofertas.slice(0,5) : [])" :key="oferta">
-                                <div class="row align-items-center justify-content-center">
-                                    <div class="col-12 col-sm-4 text-center">
-                                        <p class="price-cont mb-0" v-if="oferta?.price != -1">
-                                            $ {{ formatMoney(oferta?.price) }}
-                                        </p>
-                                        <p class="price-cont mb-0" 
-                                            v-if="oferta?.caracteristicas?.promo_cnt 
-                                                    && oferta?.price == -1">
-                                            {{ oferta?.caracteristicas?.promo_cnt }}
-                                        </p>
-                                    </div>
-                                    <div class="col-12 col-sm product-name-cont">
-                                        <span v-html="resaltarBusqueda(oferta?.products?.name, params_filtro.nombre_prod)"></span>
-                                        <small v-if="oferta?.url"><a :href="oferta?.url" target="_blank">&nbsp;IR A WEB</a></small>
-                                    </div>
-                                </div>
-                            </li>
-                            <li v-if="ofertas_filtradas[String(comercio.id)] && ofertas_filtradas[String(comercio.id)].ofertas && ofertas_filtradas[String(comercio.id)].ofertas.length === 0" class="list-group-item text-center text-muted">
-                                <em>Sin ofertas para este comercio</em>
-                            </li>
-                        </ul>
-                    </div>
+        <EmptyState v-else-if="comercios_filtrados.length == 0" icon="bi-tag" size="lg" title="No hay ofertas para mostrar"
+                    description="Probá con otro producto o quitá los filtros de comercio.">
+            <template #actions><Button label="Quitar filtros" variant="outline" @click="elegirComercio(null, true)" /></template>
+        </EmptyState>
 
-                    <div class="card-footer bg-transparent border-0 text-center mt-2">
-                        <button class="btn btn-link expand-btn" @click="mostrarModalOfertas(comercio, ofertas_filtradas[String(comercio.id)].ofertas)">
-                            Ver todas las ofertas <svg width="16" height="16" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L12.293 8 6.646 2.354a.5.5 0 0 1 0-.708z"/></svg>
-                        </button>
+        <div v-else class="pub-grid">
+            <Card v-for="(comercio, index) in comercios_filtrados" :key="comercio.id" class="card-ofertas" flush>
+                <template #header>
+                    <div class="d-flex align-items-center justify-content-between gap-2 w-100">
+                        <h2 class="fs-6 mb-0 d-flex align-items-center gap-2"><Icon name="bi-shop" /> {{ comercio?.empresa?.name }}</h2>
+                        <Badge tone="primary" size="sm" :label="(ofertasDe(comercio).length) + ' ofertas'" />
                     </div>
-                </div>
-            </div>
+                </template>
+                <ul class="list-unstyled mb-0">
+                    <li class="oferta-item" v-for="(oferta, idx) in ofertasDe(comercio).slice(0,5)" :key="idx">
+                        <span class="oferta-item__name" v-html="resaltarBusqueda(oferta?.products?.name, params_filtro.nombre_prod)"></span>
+                        <span class="oferta-item__price gb-num" v-if="oferta?.price != -1">$ {{ formatMoney(oferta?.price) }}</span>
+                        <span class="oferta-item__price" v-if="oferta?.caracteristicas?.promo_cnt && oferta?.price == -1">{{ oferta?.caracteristicas?.promo_cnt }}</span>
+                        <a v-if="oferta?.url" :href="oferta?.url" target="_blank" rel="noopener" class="small" :aria-label="'Ver en la web: ' + oferta?.products?.name"><Icon name="bi-box-arrow-up-right" /></a>
+                    </li>
+                </ul>
+                <template #footer>
+                    <button class="btn btn-link btn-sm w-100 text-decoration-none" @click="mostrarModalOfertas(comercio, ofertasDe(comercio))">
+                        Ver todas las ofertas <Icon name="bi-chevron-right" />
+                    </button>
+                </template>
+            </Card>
         </div>
+      </div>
+
         <!-- Modal de detalle de ofertas -->
-        <div v-if="modalOfertas.visible" class="modal-ofertas-backdrop">
-            <div class="modal-ofertas-content">
-                <div class="modal-ofertas-header">
-                    <b>{{ modalOfertas.comercio?.empresa?.name }}</b>
-                    <button class="btn-close" @click="cerrarModalOfertas" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-ofertas-body">
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item oferta-item" v-for="oferta in modalOfertas.ofertas" :key="oferta">
-                            <div class="row align-items-center justify-content-center">
-                                <div class="col-12 col-sm-4 text-center">
-                                    <p class="price-cont mb-0" v-if="oferta?.price != -1">
-                                        $ {{ formatMoney(oferta?.price) }}
-                                    </p>
-                                    <p class="price-cont mb-0" 
-                                        v-if="oferta?.caracteristicas?.promo_cnt 
-                                                && oferta?.price == -1">
-                                        {{ oferta?.caracteristicas?.promo_cnt }}
-                                    </p>
-                                </div>
-                                <div class="col-12 col-sm product-name-cont">
-                                    <span v-html="resaltarBusqueda(oferta?.products?.name, params_filtro.nombre_prod)"></span>
-                                    <small v-if="oferta?.url"><a :href="oferta?.url" target="_blank">&nbsp;IR A WEB</a></small>
-                                </div>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
+        <Dialog :visible="modalOfertas.visible" @update:visible="v => { if (!v) cerrarModalOfertas() }"
+                :header="modalOfertas.comercio?.empresa?.name" size="md" modal dismissableMask>
+            <ul class="list-unstyled mb-0">
+                <li class="oferta-item" v-for="(oferta, idx) in modalOfertas.ofertas" :key="idx">
+                    <span class="oferta-item__name" v-html="resaltarBusqueda(oferta?.products?.name, params_filtro.nombre_prod)"></span>
+                    <span class="oferta-item__price gb-num" v-if="oferta?.price != -1">$ {{ formatMoney(oferta?.price) }}</span>
+                    <span class="oferta-item__price" v-if="oferta?.caracteristicas?.promo_cnt && oferta?.price == -1">{{ oferta?.caracteristicas?.promo_cnt }}</span>
+                    <a v-if="oferta?.url" :href="oferta?.url" target="_blank" rel="noopener" class="small" :aria-label="'Ver en la web: ' + oferta?.products?.name"><Icon name="bi-box-arrow-up-right" /></a>
+                </li>
+            </ul>
+        </Dialog>
+    </main>
+    <PublicFooter />
 </template>
-    
+
 <script setup>
     import { ref, onMounted } from 'vue'
     import { AppStore } from '../stores/app'
     import PublicTopBar from "../components/publico/PublicTopBar.vue";
+    import PublicFooter from "../components/publico/PublicFooter.vue";
     
     import { formatMoney, fechaDateToString } from '../helpers/formatter'
     import { busqueda_promociones, comercios_promociones } from '../api/public/publicEndpoints'
@@ -116,6 +110,26 @@
 
     const modalOfertas = ref({ visible: false, comercio: null, ofertas: [] })
 
+    // ---- UI: filtros rápidos (chips + búsqueda) sobre filtrar_ofertas ----
+    const cargando = ref(true)
+    const filtrosAbiertos = ref(false)
+    const busquedaNombre = ref('')
+    const comercioActivo = ref(null)
+    function ofertasDe(comercio){
+        return ofertas_filtradas.value[String(comercio.id)]?.ofertas || []
+    }
+    function aplicarFiltroRapido(){
+        const comercio = {}
+        if (comercioActivo.value !== null) comercio[comercioActivo.value] = true
+        filtrar_ofertas({ ...params_filtro.value, comercio, nombre_prod: busquedaNombre.value })
+    }
+    function aplicarBusqueda(){ aplicarFiltroRapido() }
+    function elegirComercio(id, limpiarTexto = false){
+        comercioActivo.value = id
+        if (limpiarTexto) busquedaNombre.value = ''
+        aplicarFiltroRapido()
+    }
+
     function mostrarModalOfertas(comercio, ofertas) {
         modalOfertas.value = { visible: true, comercio, ofertas }
     }
@@ -130,6 +144,9 @@
                                 'listado_comercios': listado_comercios.value,
                                 _callback_ok: ( filtro_ ) => {
                                     filtrar_ofertas( filtro_ )
+                                    busquedaNombre.value = filtro_?.nombre_prod || ''
+                                    const sel = Object.keys(filtro_?.comercio || {})
+                                    comercioActivo.value = sel.length == 1 ? (listado_empresas.value.find(e => String(e.id) == sel[0])?.id ?? null) : null
                                     storeApp.ocultar_modal( modal_form.code )
                                     return
                                 }
@@ -202,9 +219,11 @@
         return false
     }
 
+    function escapeRegex(t){ return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+
     function resaltarBusqueda(texto, termino) {
         if (!termino || typeof texto !== 'string') return texto;
-        const regex = new RegExp(`(${termino})`, 'ig');
+        const regex = new RegExp('(' + escapeRegex(String(termino)) + ')', 'ig');
         return texto.replace(regex, '<mark>$1</mark>');
     }
 
@@ -214,6 +233,7 @@
         if (res_comercios){
             storeApp.loading = false
             if (!res_comercios.stat){
+                cargando.value = false
                 storeApp.mostrar_alerta( "No se pudieron obtener los comercios" )
                 return false
             }
@@ -226,6 +246,7 @@
         if (res){
             storeApp.loading = false
             if (!res.stat){
+                cargando.value = false
                 storeApp.mostrar_alerta( "No se pudieron obtener las promociones del día" )
                 return false
             }
@@ -253,112 +274,24 @@
             }
 
             ofertas_filtradas.value = JSON.parse(JSON.stringify(listado_por_comercio.value))
+            cargando.value = false
         } else
             storeApp.loading = false
+        cargando.value = false
     })
 </script>
 
 <style scoped>
-#ofertas-cnt{
-    margin-top: 5rem;
+.card-ofertas { height: 100%; }
+.oferta-item {
+  display: flex; align-items: center; gap: var(--gb-space-3);
+  padding: .625rem var(--gb-space-4);
+  border-bottom: 1px solid var(--gb-border);
+  transition: background var(--gb-transition-fast);
 }
-
-.price-cont{
-    color:rgb(70, 116, 0);
-    font-weight: bolder;
-    min-width: 120px;
-    font-size: 1.3rem;
-}
-.product-name-cont{
-  font-weight: bolder;
-  font-size: 1rem;
-  color: #1e3c82;
-}
-.card-header {
-  font-size: 1.1rem;
-}
-.card {
-  border-radius: 1rem;
-  transition: box-shadow 0.2s;
-  min-height: 22rem;
-  max-height: 22rem;
-  display: flex;
-  flex-direction: column;
-}
-.card-body {
-  flex: 1 1 auto;
-  overflow: hidden;
-  padding-bottom: 0.5rem;
-}
-.oferta-item:focus {
-  outline: 2px solid #20c997;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 0.2rem rgba(32, 201, 151, 0.25);
-}
-.oferta-item:hover {
-  background-color: #f8f9fa;
-  transition: background-color 0.2s;
-}
-.expand-btn {
-  font-weight: bold;
-  color: #198754;
-  text-decoration: none;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 0.5rem 0;
-  transition: color 0.2s;
-}
-.expand-btn:focus {
-  outline: 2px solid #20c997;
-  outline-offset: 2px;
-}
-/* Modal estilos */
-.modal-ofertas-backdrop {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.3);
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.modal-ofertas-content {
-  background: #fff;
-  border-radius: 1rem;
-  max-width: 600px;
-  width: 95vw;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 0 32px 0 rgba(32, 201, 151, 0.15);
-  display: flex;
-  flex-direction: column;
-}
-@media (max-width: 600px) {
-  .modal-ofertas-content {
-    max-width: 98vw;
-    width: 98vw;
-    border-radius: 0.5rem;
-  }
-}
-.modal-ofertas-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem 0.5rem 1.5rem;
-  border-bottom: 1px solid #eee;
-  background: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.modal-ofertas-body {
-  padding: 1rem 1.5rem;
-}
-.card-footer {
-  background: transparent;
-  border: none;
-  text-align: center;
-  margin-top: 0.5rem;
-}
+.oferta-item:last-child { border-bottom: 0; }
+.oferta-item:hover { background: var(--gb-surface-2); }
+.oferta-item__name { flex: 1; min-width: 0; font-size: .875rem; color: var(--gb-text); }
+.oferta-item__price { font-weight: 700; color: var(--gb-primary); white-space: nowrap; }
+.pub-search--inline { max-width: none; box-shadow: var(--gb-shadow-sm); border: 1px solid var(--gb-border); }
 </style>

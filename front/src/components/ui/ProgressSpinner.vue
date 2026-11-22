@@ -17,6 +17,6 @@ const styleObject = computed(() => {
 
 <style scoped>
 .local-spinner {
-  color: #0f054c;
+  color: var(--gb-primary);
 }
 </style>

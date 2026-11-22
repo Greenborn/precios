@@ -1,16 +1,19 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="usuarios"
-    :api="vteApi"
-    :config="vteConfig"
-    @rowSelected="onRowSelected"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  <AbmShell subtitle="Usuarios administradores del panel y sus roles asignados.">
+    <VteTableEditor
+      ref="table_ref"
+      id="usuarios"
+      :api="vteApi"
+      :config="vteConfig"
+      @rowSelected="onRowSelected"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed, onMounted } from 'vue'
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { get_all, add_one, put_one, delete_one } from '@/api/admin/gestionUsuarios'
   import { getAllRoles } from '@/api/admin/gestionRBAC'

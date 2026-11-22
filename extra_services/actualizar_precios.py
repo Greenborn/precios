@@ -616,15 +616,29 @@ def procesa_precio(cursor, conexion, producto_db, articulo, fecha_registro):
                 WHERE id = %s
             """, (datetime.now(), datetime.now(), articulo.get('url'), ultimo_precio['id']))
             
-            # Verificar si ya existe en price_today
+            # Upsert en price_today por (product_id, branch_id), refrescando la fecha:
+            # el precio se confirmó hoy. Antes se buscaba por price_id: si ya existía
+            # no se refrescaba date_time (la limpieza hoy+ayer lo terminaba borrando)
+            # y si existía otro registro de la misma sucursal quedaban duplicados.
+            ahora = datetime.now()
             cursor.execute("""
-                SELECT * FROM price_today WHERE price_id = %s LIMIT 1
-            """, (ultimo_precio['id'],))
-            
-            repetido = cursor.fetchone()
-            
-            if not repetido:
-                # Insertar en price_today
+                SELECT id FROM price_today WHERE product_id = %s AND branch_id = %s LIMIT 1
+            """, (producto_db['id'], articulo['branch_id']))
+            existente = cursor.fetchone()
+
+            if existente:
+                id_precio_hoy = existente[0]
+                cursor.execute("""
+                    UPDATE price_today
+                    SET price = %s, date_time = %s, time = %s, url = %s,
+                        product_name = %s, price_id = %s, es_oferta = 0, confiabilidad = 100
+                    WHERE product_id = %s AND branch_id = %s
+                """, (
+                    ultimo_precio['price'], ahora, ahora, articulo.get('url'),
+                    articulo['name'], ultimo_precio['id'],
+                    producto_db['id'], articulo['branch_id']
+                ))
+            else:
                 id_precio_hoy = generar_uuid_v7()
                 cursor.execute("""
                     INSERT INTO price_today 
@@ -633,26 +647,27 @@ def procesa_precio(cursor, conexion, producto_db, articulo, fecha_registro):
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     id_precio_hoy, producto_db['id'], ultimo_precio['price'],
-                    datetime.now(), articulo['branch_id'], 0, 100, None,
-                    articulo.get('url'), datetime.now(), articulo['name'],
+                    ahora, articulo['branch_id'], 0, 100, None,
+                    articulo.get('url'), ahora, articulo['name'],
                     ultimo_precio['id']
                 ))
-                sincronizar_cache_precio({
-                    'id': id_precio_hoy,
-                    'product_id': producto_db['id'],
-                    'branch_id': articulo['branch_id'],
-                    'price': ultimo_precio['price'],
-                    'product_name': articulo['name'],
-                    'date_time': datetime.now(),
-                    'time': datetime.now(),
-                    'es_oferta': 0,
-                    'confiabilidad': 100,
-                    'notas': None,
-                    'url': articulo.get('url'),
-                    'price_id': ultimo_precio['id']
-                })
-            
+
             conexion.commit()
+            # Sincronizar buscador/caches siempre después del commit
+            sincronizar_cache_precio({
+                'id': id_precio_hoy,
+                'product_id': producto_db['id'],
+                'branch_id': articulo['branch_id'],
+                'price': ultimo_precio['price'],
+                'product_name': articulo['name'],
+                'date_time': ahora,
+                'time': ahora,
+                'es_oferta': 0,
+                'confiabilidad': 100,
+                'notas': None,
+                'url': articulo.get('url'),
+                'price_id': ultimo_precio['id']
+            })
             return True
     else:
         # No hay precio anterior, crear nuevo

@@ -1,0 +1,72 @@
+// Custom properties --gb-* (consumir en componentes con var(--gb-...)).
+@use "sass:map";
+@use "./tokens" as *;
+
+:root,
+[data-bs-theme="light"] {
+  --gb-primary: #{$gb-primary};
+  --gb-primary-hover: #{$gb-primary-hover};
+  --gb-primary-soft: #{$gb-brand-50};
+  --gb-primary-soft-2: #{$gb-brand-100};
+  --gb-accent: #{$gb-accent};
+  --gb-success: #{$gb-success};
+  --gb-warning: #{$gb-warning};
+  --gb-danger: #{$gb-danger};
+  --gb-info: #{$gb-info};
+  --gb-success-soft: #{$gb-brand-50};
+  --gb-warning-soft: #{$gb-warning-soft};
+  --gb-danger-soft: #{$gb-danger-soft};
+  --gb-info-soft: #{$gb-info-soft};
+  --gb-on-primary: #{$gb-on-primary};
+  --gb-brand-accent-light: #{$gb-brand-400};
+
+  --gb-text: #{$gb-text};
+  --gb-text-muted: #{$gb-text-muted};
+  --gb-heading: #{$gb-slate-900};
+  --gb-bg: #{$gb-bg};
+  --gb-surface: #{$gb-surface};
+  --gb-surface-2: #{$gb-slate-100};
+  --gb-border: #{$gb-border};
+  --gb-border-strong: #{$gb-slate-300};
+  --gb-sidebar-bg: #{$gb-sidebar-bg};
+  --gb-overlay: rgba(15, 23, 42, 0.5);
+
+  @each $k, $v in $gb-space { --gb-space-#{$k}: #{$v}; }
+
+  --gb-radius-sm: #{$gb-radius-sm};
+  --gb-radius: #{$gb-radius};
+  --gb-radius-lg: #{$gb-radius-lg};
+  --gb-radius-pill: #{$gb-radius-pill};
+
+  --gb-shadow-sm: #{$gb-shadow-sm};
+  --gb-shadow: #{$gb-shadow};
+  --gb-shadow-lg: #{$gb-shadow-lg};
+
+  --gb-font-sans: #{$gb-font-sans};
+  --gb-font-mono: #{$gb-font-mono};
+
+  --gb-transition-fast: #{$gb-transition-fast};
+  --gb-transition: #{$gb-transition};
+  --gb-transition-slow: #{$gb-transition-slow};
+
+  --gb-control-height: #{$gb-control-height};
+  --gb-control-height-sm: #{$gb-control-height-sm};
+  --gb-focus-ring: #{$gb-focus-ring};
+}
+
+// Estructura para modo oscuro futuro (sin toggle aún).
+[data-bs-theme="dark"] {
+  --gb-primary: #{$gb-brand-500};
+  --gb-primary-hover: #{$gb-brand-400};
+  --gb-primary-soft: rgba(34, 197, 94, 0.12);
+  --gb-primary-soft-2: rgba(34, 197, 94, 0.2);
+  --gb-text: #{$gb-slate-200};
+  --gb-text-muted: #{$gb-slate-400};
+  --gb-heading: #{$gb-slate-50};
+  --gb-bg: #{$gb-slate-900};
+  --gb-surface: #{$gb-slate-800};
+  --gb-surface-2: #{$gb-slate-700};
+  --gb-border: #{$gb-slate-700};
+  --gb-border-strong: #{$gb-slate-600};
+  --gb-overlay: rgba(0, 0, 0, 0.6);
+}

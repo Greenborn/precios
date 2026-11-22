@@ -1,0 +1,109 @@
+// =====================================================================
+// Greenborn Design Tokens (fuente única de verdad: SCSS)
+// Se usan para: (1) variables de Bootstrap en _bootstrap-custom.scss,
+// (2) custom properties --gb-* emitidas en _theme.scss.
+// =====================================================================
+
+// ---- Marca ----
+$gb-brand-50:  #f0fdf4;
+$gb-brand-100: #dcfce7;
+$gb-brand-200: #bbf7d0;
+$gb-brand-300: #86efac;
+$gb-brand-400: #4ade80;
+$gb-brand-500: #22c55e;
+$gb-brand-600: #16a34a;
+$gb-brand-700: #15803d; // primario (AA: 5.02:1 sobre blanco)
+$gb-brand-800: #166534;
+$gb-brand-900: #14532d;
+
+$gb-teal-500: #14b8a6;
+$gb-teal-600: #0d9488;
+$gb-teal-700: #0f766e; // acento / secondary de marca
+$gb-teal-800: #115e59;
+
+// ---- Neutros (slate) ----
+$gb-slate-50:  #f8fafc;
+$gb-slate-100: #f1f5f9;
+$gb-slate-200: #e2e8f0;
+$gb-slate-300: #cbd5e1;
+$gb-slate-400: #94a3b8;
+$gb-slate-500: #64748b;
+$gb-slate-600: #475569;
+$gb-slate-700: #334155;
+$gb-slate-800: #1e293b;
+$gb-slate-900: #0f172a;
+
+// ---- Semánticos ----
+// Contraste WCAG AA verificado (texto normal >= 4.5:1 sobre #fff):
+//   primary #15803d 5.02 | accent #0f766e 5.47 | success #15803d 5.02
+//   warning #b45309 5.02 | danger #dc2626 4.83 | info #0369a1 5.93
+// (brand-600 #16a34a daba 3.30:1 y fallaba AA con texto blanco/sobre blanco.)
+$gb-primary: $gb-brand-700;
+$gb-primary-hover: $gb-brand-800;
+$gb-accent:  $gb-teal-700;
+$gb-success: $gb-brand-700;
+$gb-warning: #b45309;
+$gb-danger:  #dc2626;
+$gb-info:    #0369a1;
+
+// Colores "sobre" fondos sólidos y fondos suaves semánticos
+$gb-on-primary:   #ffffff;
+$gb-warning-soft: #fffbeb;
+$gb-danger-soft:  #fef2f2;
+$gb-info-soft:    #f0f9ff;
+$gb-login-bg-end: #0b1222;
+
+$gb-text:        $gb-slate-800;
+$gb-text-muted:  $gb-slate-500;
+$gb-bg:          $gb-slate-50;
+$gb-surface:     #ffffff;
+$gb-border:      $gb-slate-200;
+$gb-sidebar-bg:  $gb-slate-900;
+
+// ---- Espaciado (base 4px) ----
+$gb-space: (
+  0: 0,
+  1: 0.25rem,
+  2: 0.5rem,
+  3: 0.75rem,
+  4: 1rem,
+  5: 1.5rem,
+  6: 2rem,
+  7: 3rem,
+);
+
+// ---- Radios ----
+$gb-radius-sm: 8px;
+$gb-radius:    12px;
+$gb-radius-lg: 16px;
+$gb-radius-pill: 999px;
+
+// ---- Sombras ----
+$gb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08);
+$gb-shadow:    0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+$gb-shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.14), 0 8px 16px rgba(15, 23, 42, 0.06);
+
+// ---- Tipografía ----
+$gb-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$gb-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$gb-font-size-base: 0.9375rem; // 15px
+$gb-font-size-sm: 0.8125rem;
+$gb-font-size-lg: 1.0625rem;
+$gb-line-height: 1.5;
+$gb-h1: 2rem;
+$gb-h2: 1.625rem;
+$gb-h3: 1.375rem;
+$gb-h4: 1.1875rem;
+$gb-h5: 1.0625rem;
+$gb-h6: 0.9375rem;
+
+// ---- Movimiento ----
+$gb-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+$gb-transition-fast: 120ms $gb-ease;
+$gb-transition:      200ms $gb-ease;
+$gb-transition-slow: 320ms $gb-ease;
+
+// ---- Controles ----
+$gb-control-height: 2.5rem;
+$gb-control-height-sm: 2rem;
+$gb-focus-ring: 0 0 0 3px rgba($gb-primary, 0.25);

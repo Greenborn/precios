@@ -15,7 +15,7 @@
             :disabled="disabled"
             @update:modelValue="handleSelect" />
           <div class="col-auto pt-2" v-if="displayValue || lastSelected">
-            <span class="badge bg-info" style="display: inline-block; margin-top: 0.5rem;">
+            <span class="badge bg-info d-inline-block mt-2">
               {{ (lastSelected && lastSelected[optionLabel]) || displayValue }}
             </span>
           </div>

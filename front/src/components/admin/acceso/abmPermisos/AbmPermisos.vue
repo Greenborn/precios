@@ -1,16 +1,19 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="permisos"
-    :api="vteApi"
-    :config="vteConfig"
-    @rowSelected="onRowSelected"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  <AbmShell subtitle="Permisos atómicos del sistema RBAC.">
+    <VteTableEditor
+      ref="table_ref"
+      id="permisos"
+      :api="vteApi"
+      :config="vteConfig"
+      @rowSelected="onRowSelected"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed, onMounted } from 'vue';
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { getAllPermisos, crearPermiso, borrarPermiso, editarPermiso } from '@/api/admin/gestionRBAC'
   import { AppStore } from '@/stores/app'

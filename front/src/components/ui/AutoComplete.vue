@@ -1,8 +1,15 @@
 <template>
-  <div class="position-relative w-100" ref="cont">
+  <FormField :label="label" :help="help" :error="error" :required="required" :input-id="fid">
+  <div class="position-relative w-100 gb-ac" ref="cont" v-bind="$attrs">
     <input
+      :id="fid"
       type="text"
       class="form-control"
+      :class="{ 'is-invalid': !!error, 'pe-5': buscando }"
+      role="combobox"
+      :aria-expanded="abierto ? 'true' : 'false'"
+      :aria-invalid="error ? 'true' : null"
+      :aria-describedby="describedBy"
       :disabled="disabled"
       v-model="texto"
       :placeholder="placeholder"
@@ -15,6 +22,7 @@
       @keydown.up="mover_sel(-1)"
       @keydown.enter="enter_sel"
     />
+    <span v-if="buscando" class="spinner-border spinner-border-sm gb-ac__spin" aria-hidden="true"></span>
     <ul v-if="abierto && sugerencias.length" class="list-group autocomplete-dropdown">
       <li
         v-for="(opt, i) in sugerencias"
@@ -28,10 +36,15 @@
       </li>
     </ul>
   </div>
+  </FormField>
 </template>
 
 <script setup>
   import { ref, watch } from 'vue'
+  import FormField from './FormField.vue'
+  import { fieldProps, useFieldId } from './useField'
+
+  defineOptions({ inheritAttrs: false })
 
   const props = defineProps({
     modelValue: { default: null },
@@ -43,10 +56,13 @@
     disabled: { type: Boolean, default: false },
     minChars: { type: Number, default: 2 },
     debounce: { type: Number, default: 300 },
+    id: { type: String, default: '' },
+    ...fieldProps,
   })
 
   const emit = defineEmits(['update:modelValue'])
 
+  const { fid, describedBy } = useFieldId(props)
   const texto = ref('')
   const abierto = ref(false)
   const sugerencias = ref([])
@@ -144,13 +160,33 @@
 <style scoped>
   .autocomplete-dropdown {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
     z-index: 1050;
     max-height: 260px;
     overflow-y: auto;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.2);
-    border-radius: 0.25rem;
+    padding: 0.25rem;
+    background: var(--gb-surface);
+    border: 1px solid var(--gb-border);
+    box-shadow: var(--gb-shadow);
+    border-radius: var(--gb-radius-sm);
+  }
+  .autocomplete-dropdown .list-group-item {
+    border: 0;
+    border-radius: 6px;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+  }
+  .autocomplete-dropdown .list-group-item.active {
+    background: var(--gb-primary-soft);
+    color: var(--gb-heading);
+  }
+  .gb-ac__spin {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    margin-top: -0.5rem;
+    color: var(--gb-text-muted);
   }
 </style>

@@ -1,88 +1,67 @@
 <template>
     <PublicTopBar @filtrar_evnt="filtrar" />
 
-    <div class="container-fluid" id="categorias-cnt">
-        <div class="row align-items-center justify-content-center">
-            <div class="col-12 col-md-10 col-lg-8 ">
-                
-                <div class="row align-items-center justify-content-center">
-                    <div class="col-auto">
-                        <nav aria-label="breadcrumb">
-                            <ol class="breadcrumb">
-                                <li class="breadcrumb-item" v-for="bc in bread_crumbs" :key="bc">
-                                    <a href="#/categorias" v-if="bc.visible < fase" @click="breadcrumb_click(bc)">{{ bc.label }}</a>
-                                    <span v-if = "bc.visible == fase">{{ bc.label }}</span>
-                                </li>
-                            </ol>
-                        </nav>
-                    </div>
-                </div>
+    <main class="pub-main" id="categorias-cnt">
+      <div class="pub-container">
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="cat-breadcrumbs">
+                <li><router-link to="/">Inicio</router-link><Icon name="bi-chevron-right" class="cat-breadcrumbs__sep" /></li>
+                <template v-for="bc in bread_crumbs" :key="bc.visible">
+                    <li v-if="bc.visible <= fase" :aria-current="bc.visible == fase ? 'page' : null">
+                        <a href="#/categorias" v-if="bc.visible < fase" @click.prevent="breadcrumb_click(bc)">{{ bc.label }}</a>
+                        <span v-else>{{ bc.label }}</span>
+                        <Icon v-if="bc.visible < fase" name="bi-chevron-right" class="cat-breadcrumbs__sep" />
+                    </li>
+                </template>
+            </ol>
+        </nav>
 
-                <div class="row">
-                    <div class="col-12 col-sm-6 col-lg-4" v-for="cat in menu_lst" :key="cat">
-                        
-                        <div v-if="fase < 2"
-                            class="card rounded-0 text-bg-success mb-3 category_btn" style="height: 10rem;" 
-                            @click="categoria_click(cat)">
-                            <div class="card-body text-center">
-                                <div class="row align-items-center justify-content-center">
-                                    <div class="col">
-                                        <h3><b>{{ cat.nombre }}</b></h3>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+        <PageHeader :title="titulos[fase]" icon="bi-diagram-3"
+                    :subtitle="fase < 2 ? 'Elegí una opción para seguir navegando.' : 'Últimos precios registrados por producto.'" />
 
-                        <div v-if="fase == 2" 
-                            class="card rounded-0 text-bg-secundary mb-3" style="height: 20rem; overflow-y: scroll;" 
-                        >
-                            <div class="card-header text-center">
-                                <b>{{ cat.name }}</b>
-                            </div>
-                            
-                            <div class="card-body text-center">
-                                <div class="row align-items-center justify-content-center">
-                                    <div class="col" >
-
-                                        <ul class="list-group">
-                                            <li class="list-group-item" v-for="precio in cat.precios" :key="precio">
-                                                <div class="row">
-
-                                                    <div class="col">
-                                                        <b>${{ formatMoney(precio?.price) }}</b> <br>
-                                                        <small>{{ formateaFecha(precio?.date_time) }}</small>
-                                                    </div>
-
-                                                    <div class="col">
-                                                        {{ precio?.branch?.enterprise?.name }}
-                                                    </div>
-
-                                                </div>
-                                            </li>
-                                        </ul>
-
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <div class="alert alert-info mt-3" v-if="menu_lst.length == 0">
-                        No hay resultados.
-                    </div>
-                </div>
-                
-            </div>
+        <div class="d-md-none mb-3">
+            <label for="cat-filtro" class="visually-hidden">Filtrar</label>
+            <input id="cat-filtro" type="search" class="form-control" placeholder="Filtrar…" :value="filtro"
+                   @input="filtrar($event.target.value)">
         </div>
-    </div>
 
+        <EmptyState v-if="menu_lst.length == 0" icon="bi-search" title="No hay resultados"
+                    description="Probá con otro filtro o volvé al nivel anterior." />
+
+        <div v-else-if="fase < 2" class="pub-grid pub-grid--4">
+            <button v-for="cat in menu_lst" :key="cat.id ?? cat.nombre" type="button" class="pub-quick text-start category_btn"
+                    @click="categoria_click(cat)">
+                <span class="pub-quick__icon" aria-hidden="true"><Icon :name="fase == 0 ? 'bi-shop-window' : 'bi-tags'" /></span>
+                <h2 class="pub-quick__title">{{ cat.nombre }}</h2>
+                <span class="pub-quick__desc">Ver {{ fase == 0 ? 'categorías' : 'productos' }} <Icon name="bi-arrow-right" /></span>
+            </button>
+        </div>
+
+        <div v-else class="pub-grid">
+            <Card v-for="cat in menu_lst" :key="cat.id ?? cat.name" :title="cat.name" flush>
+                <ul class="list-unstyled mb-0 cat-precios">
+                    <li v-for="(precio, k) in cat.precios" :key="k" class="cat-precio">
+                        <div>
+                            <div class="fw-semibold">{{ precio?.branch?.enterprise?.name }}</div>
+                            <small class="gb-text-muted"><Icon name="bi-clock" /> {{ formateaFecha(precio?.date_time) }}</small>
+                        </div>
+                        <span class="cat-precio__valor gb-num">${{ formatMoney(precio?.price) }}</span>
+                    </li>
+                    <li v-if="!cat.precios?.length" class="cat-precio gb-text-muted small">Sin precios registrados</li>
+                </ul>
+            </Card>
+        </div>
+      </div>
+    </main>
+    <PublicFooter />
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { AppStore } from "../stores/app"
 import PublicTopBar from "../components/publico/PublicTopBar.vue";
+import PublicFooter from "../components/publico/PublicFooter.vue";
+const titulos = ['Tipos de comercios', 'Categorías', 'Productos']
 
 import { get_categorias, get_empresas_categoria, get_sub_categorias, get_categorias_empresa, get_productos } from '../api/public/publicEndpoints'
 import { formatMoney, fechaDateToString } from '../helpers/formatter'
@@ -254,16 +233,16 @@ async function categoria_click( cat ){
 </script>
 
 <style scoped>
-#categorias-cnt{
-    margin-top: 6rem;
-}
-
-.category_btn{
-    cursor: pointer;
-    user-select:none;
-}
-
-.category_btn:hover{
-    background-color: #4db886 !important;
-}
+.category_btn { cursor: pointer; user-select: none; width: 100%; }
+.cat-breadcrumbs { list-style: none; display: flex; flex-wrap: wrap; gap: .25rem; padding: 0; margin: 0; font-size: .875rem; }
+.cat-breadcrumbs li { display: inline-flex; align-items: center; gap: .25rem; color: var(--gb-text-muted); }
+.cat-breadcrumbs a { color: var(--gb-primary); text-decoration: none; }
+.cat-breadcrumbs a:hover { text-decoration: underline; }
+.cat-breadcrumbs [aria-current] span { color: var(--gb-heading); font-weight: 600; }
+.cat-breadcrumbs__sep { font-size: .7rem; }
+.cat-precios { max-height: 18rem; overflow-y: auto; }
+.cat-precio { display: flex; justify-content: space-between; align-items: center; gap: .75rem;
+  padding: .625rem var(--gb-space-4); border-bottom: 1px solid var(--gb-border); }
+.cat-precio:last-child { border-bottom: 0; }
+.cat-precio__valor { font-weight: 700; color: var(--gb-primary); white-space: nowrap; }
 </style>

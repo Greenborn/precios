@@ -8,7 +8,7 @@
       </div>
     </div>
     <div class="modal-chat-enviar">
-      <input type="text" v-model="mensaje" placeholder="Escribe un mensaje...">
+      <input type="text" v-model="mensaje" placeholder="Escribe un mensaje..." aria-label="Mensaje">
       <button @click="enviarMensaje">Enviar</button>
     </div>
   </div>
@@ -58,11 +58,11 @@ async function enviarMensaje() {
 
 <style scoped>
 .modal-chat {
-  width: 400px;
+  width: min(400px, 100%);
   height: 600px;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  background-color: var(--gb-surface);
+  border: 1px solid var(--gb-border);
+  border-radius: var(--gb-radius);
   padding: 20px;
 }
 
@@ -71,7 +71,7 @@ async function enviarMensaje() {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 20px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--gb-border);
 }
 
 .modal-chat-mensajes {
@@ -83,8 +83,8 @@ async function enviarMensaje() {
 .mensaje {
   margin-bottom: 10px;
   padding: 10px;
-  background-color: #f7f7f7;
-  border-radius: 10px;
+  background-color: var(--gb-surface-2);
+  border-radius: var(--gb-radius);
 }
 
 .nombre {
@@ -97,13 +97,13 @@ async function enviarMensaje() {
 
 .hora {
   font-size: 12px;
-  color: #666;
+  color: var(--gb-text-muted);
   margin-left: 10px;
 }
 
 .modal-chat-enviar {
   padding: 20px;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--gb-border);
 }
 
 input[type="text"] {
@@ -111,8 +111,8 @@ input[type="text"] {
   height: 40px;
   padding: 10px;
   font-size: 16px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  border: 1px solid var(--gb-border);
+  border-radius: var(--gb-radius);
 }
 
 button {
@@ -120,14 +120,14 @@ button {
   height: 40px;
   padding: 10px;
   font-size: 16px;
-  background-color: #4CAF50;
-  color: #fff;
+  background-color: var(--gb-primary);
+  color: var(--gb-on-primary);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--gb-radius);
   cursor: pointer;
 }
 
 button:hover {
-  background-color: #3e8e41;
+  background-color: var(--gb-primary-hover);
 }
 </style>

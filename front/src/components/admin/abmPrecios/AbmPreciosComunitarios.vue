@@ -1,49 +1,28 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="precios_comunitarios"
-    :api="vteApi"
-    :config="vteConfig"
-    @rowSelected="onRowSelected"></VteTableEditor>
+  <AbmShell subtitle="Precios cargados por la comunidad. Revisá y eliminá los incorrectos.">
+    <CrudModulo
+      recurso="precios"
+      endpoint="/precios_comunitarios"
+      :http="crudHttp"
+      :permisos="permisos"
+      titulo="Precios comunitarios"
+      :elemento="{ singular: 'Precio comunitario', gender: 'M' }"
+      :acciones="{ listar: true, crear: false, editar: false, eliminar: true }" />
+  </AbmShell>
 </template>
 
 <script setup>
-  import { ref, computed } from 'vue'
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
-  import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
-  import { get_all, delete_one } from '@/api/admin/preciosComunitarios'
-  import { AppStore } from "@/stores/app"
+  import { computed } from 'vue'
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
+  import { CrudModulo } from '@greenborn/vue-greenborn-crud'
+  import '@greenborn/vue-greenborn-crud/style.css'
+  import { crudHttp } from '@/helpers/crudHttp'
+  import { AppStore } from '@/stores/app'
 
   const storeApp = AppStore()
 
-  const table_ref = ref()
-  const seleccionado = ref(null)
-
-  const nombre_elemento = { singular: 'Precio comunitario', plural: 'Precios comunitarios', genero: 'M' }
-
-  const vteApi = {
-    list: buildVteList(get_all),
-  }
-
-  const crud = buildCrud({
-    api: { delete: delete_one },
-    singular: nombre_elemento.singular,
-    gender: nombre_elemento.genero,
-    storeApp,
-    getTable: () => table_ref.value,
-    getSelected: () => seleccionado.value,
-  })
-
-  const vteConfig = computed(() => ({
-    lazy: true,
-    selectionMode: 'single',
-    elementName: toVteElementName(nombre_elemento),
-    buttons: { toolbar: crud.toolbar },
-  }))
-
-  function onRowSelected(sel) {
-    seleccionado.value = sel
-  }
+  // Permisos del usuario logueado (vienen de /user/info)
+  const permisos = computed(() => storeApp.userInfo?.permisos || [])
 </script>
 
 <style scoped>

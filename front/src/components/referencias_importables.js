@@ -1,29 +1,17 @@
-
 // Mapa de componentes de administracion.
 // Las claves deben coincidir con el campo "componente" de la tabla `rutas`
 // que el backend devuelve dentro de userInfo.rutas.
-import Dasboard from './admin/Dasboard.vue'
-import AbmAdmins from './admin/abmAdmin/AbmAdmins.vue'
-import AbmRoles from './admin/acceso/abmRoles/AbmRoles.vue'
-import AbmPermisos from './admin/acceso/abmPermisos/AbmPermisos.vue'
-import AbmRutas from './admin/acceso/abmRutas/AbmRutas.vue'
-import AbmPreciosComunitarios from './admin/abmPrecios/AbmPreciosComunitarios.vue'
-import AbmAliasProductos from './admin/abmAliasProductos/AbmAliasProductos.vue'
-import AbmCategorias from './admin/abmCategorias/AbmCategorias.vue'
-import AbmAliasCategorias from './admin/abmAliasCategorias/AbmAliasCategorias.vue'
-import AbmIndicesPrecios from './admin/abmIndicesPrecios/AbmIndicesPrecios.vue'
-import ConfigCuenta from './admin/cuenta/ConfigCuenta.vue'
-
+// Carga diferida: cada ABM se descarga en su propio chunk al navegar a la ruta.
 export const referencias_componentes = {
-  Dasboard,
-  AbmAdmins,
-  AbmRoles,
-  AbmPermisos,
-  AbmRutas,
-  AbmPreciosComunitarios,
-  AbmAliasProductos,
-  AbmCategorias,
-  AbmAliasCategorias,
-  AbmIndicesPrecios,
-  ConfigCuenta,
+  Dasboard: () => import('./admin/Dasboard.vue'),
+  AbmAdmins: () => import('./admin/abmAdmin/AbmAdmins.vue'),
+  AbmRoles: () => import('./admin/acceso/abmRoles/AbmRoles.vue'),
+  AbmPermisos: () => import('./admin/acceso/abmPermisos/AbmPermisos.vue'),
+  AbmRutas: () => import('./admin/acceso/abmRutas/AbmRutas.vue'),
+  AbmPreciosComunitarios: () => import('./admin/abmPrecios/AbmPreciosComunitarios.vue'),
+  AbmAliasProductos: () => import('./admin/abmAliasProductos/AbmAliasProductos.vue'),
+  AbmCategorias: () => import('./admin/abmCategorias/AbmCategorias.vue'),
+  AbmAliasCategorias: () => import('./admin/abmAliasCategorias/AbmAliasCategorias.vue'),
+  AbmIndicesPrecios: () => import('./admin/abmIndicesPrecios/AbmIndicesPrecios.vue'),
+  ConfigCuenta: () => import('./admin/cuenta/ConfigCuenta.vue'),
 }

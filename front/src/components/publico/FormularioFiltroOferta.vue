@@ -5,7 +5,7 @@
                 <label  for="nombre_prod"><b>Nombre</b></label>
             </div>
             <div class="col-12">
-                <input class="w-100" v-model="modelo.nombre_prod" @keyup.enter="filtrar" />
+                <input id="nombre_prod" class="w-100" v-model="modelo.nombre_prod" @keyup.enter="filtrar" />
             </div>
         </div>
 

@@ -5,11 +5,19 @@ export function chat_bot_rsp( data ) {
   return request({ url: '/publico/chatbot/chat_bot_rsp', method: 'post', data })
 }
 
-export function busqueda( termino ) {
-  return request({ url: '/publico/busqueda/precios?product_name='+encodeURI(termino), method: 'get' })
+// paginado (opcional): { pagina, cantidad, orden }. Sin `pagina` el back devuelve todo.
+function params_busqueda( termino, paginado ) {
+  const p = new URLSearchParams({ product_name: termino })
+  if (paginado?.pagina)   p.set('pagina', paginado.pagina)
+  if (paginado?.cantidad) p.set('cantidad', paginado.cantidad)
+  if (paginado?.orden)    p.set('orden', paginado.orden)
+  return p.toString()
 }
-export function busqueda_promociones( termino ) {
-  return request({ url: '/publico/busqueda/promociones?product_name='+encodeURI(termino), method: 'get' })
+export function busqueda( termino, paginado ) {
+  return request({ url: '/publico/busqueda/precios?'+params_busqueda(termino, paginado), method: 'get' })
+}
+export function busqueda_promociones( termino, paginado ) {
+  return request({ url: '/publico/busqueda/promociones?'+params_busqueda(termino, paginado), method: 'get' })
 }
 
 export function comercios_promociones() {

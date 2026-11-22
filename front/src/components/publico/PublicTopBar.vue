@@ -1,76 +1,68 @@
 <template>
-<nav class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary site-navbar">
-    <div class="container">
-      <a class="navbar-brand" href="#/">Precios de Tandil</a>
+  <header class="pub-topbar" :class="{ 'is-scrolled': scrolled || menuAbierto }">
+    <nav class="pub-container pub-topbar__inner" aria-label="Navegación principal">
+      <a class="pub-topbar__brand" href="#/" aria-label="Precios de Tandil - inicio">
+        <span class="pub-topbar__logo" aria-hidden="true"><Icon name="bi-tag-fill" /></span>
+        <span>Precios de Tandil</span>
+      </a>
 
-      <div class="navbar-search d-none d-lg-flex" v-if="storeApp.ruta_actual.path == '/'">
-        <div class="input-group">
-          <input class="form-control" v-model="termino_busqueda" type="text" placeholder="Por ej: Manzana" aria-label="Buscar"
-            @keyup.enter="buscar">
-          <button class="btn btn-buscar" type="button" @click="buscar" aria-label="Buscar">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.398a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
+      <form class="pub-topbar__search d-none d-lg-flex" v-if="storeApp.ruta_actual.path == '/' && scrolled"
+            role="search" @submit.prevent="buscar">
+        <Icon name="bi-search" class="pub-topbar__search-icon" />
+        <input v-model="termino_busqueda" type="search" placeholder="Buscar producto…" aria-label="Buscar producto">
+      </form>
 
-      <div class="d-md-none me-2" v-if="storeApp.ruta_actual.path == '/carga_precio'">
-        <button class="btn btn-cuenta" type="button" @click="agregar">Agregar</button>
-      </div>
-
-      <div class="d-md-none me-2" v-if="storeApp.ruta_actual.path == '/ofertas'">
-        <button class="btn btn-cuenta" type="button" @click="filtrar">Filtrar</button>
-      </div>
-
-      <div class="navbar-filter d-flex me-2" v-if="storeApp.ruta_actual.path == '/categorias'">
-        <input class="form-control" v-model="termino_filtro" type="text" placeholder="Filtrar" aria-label="Filtrar"
+      <div class="navbar-filter d-flex" v-if="storeApp.ruta_actual.path == '/categorias'">
+        <input class="form-control form-control-sm" v-model="termino_filtro" type="search" placeholder="Filtrar" aria-label="Filtrar categorías"
           @keyup="filtrar">
       </div>
 
-      <button class="navbar-toggler ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
+      <div class="d-flex align-items-center gap-2 ms-auto">
+        <button v-if="storeApp.ruta_actual.path == '/carga_precio'" class="btn btn-sm btn-primary d-md-none" type="button" @click="agregar">
+          <Icon name="bi-plus-lg" /> Agregar
+        </button>
+        <button v-if="storeApp.ruta_actual.path == '/ofertas'" class="btn btn-sm btn-outline-primary d-md-none" type="button" @click="filtrar">
+          <Icon name="bi-funnel" /> Filtrar
+        </button>
 
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto align-items-center gap-lg-2">
-          <li class="nav-item" v-for="(enlace) in enlaces" :key="enlace">
-            <span class="nav-link" @click="click(enlace)"
-                :class="{ active: storeApp.ruta_actual.path == enlace.path }">{{ enlace.title }}</span>
-          </li>
-          <li class="nav-item ms-lg-2" v-if="!isLogged">
-            <button class="btn btn-cuenta" type="button" @click="irIngresar">Ingresar</button>
-          </li>
-          <li class="nav-item ms-lg-2 d-flex align-items-center gap-2" v-else>
-            <button class="btn btn-cuenta" type="button" @click="irDashboard">
-              <i class="bi bi-person-circle me-1"></i>{{ storeApp.userInfo?.name || 'Mi cuenta' }}
-            </button>
-            <button class="btn btn-logout" type="button" title="Cerrar sesión" aria-label="Cerrar sesión" @click="cerrar_sesion">
-              <i class="bi bi-box-arrow-right"></i>
-            </button>
+        <button class="pub-topbar__toggler d-lg-none" type="button" :aria-expanded="menuAbierto ? 'true' : 'false'"
+                aria-controls="pubNav" :aria-label="menuAbierto ? 'Cerrar menú' : 'Abrir menú'" @click="menuAbierto = !menuAbierto">
+          <Icon :name="menuAbierto ? 'bi-x-lg' : 'bi-list'" size="1.4rem" />
+        </button>
+      </div>
+
+      <div id="pubNav" class="pub-topbar__nav" :class="{ 'is-open': menuAbierto }">
+        <ul class="pub-topbar__links">
+          <li v-for="(enlace) in enlaces" :key="enlace.path">
+            <a :href="enlace.url || ('#' + enlace.path)" class="pub-topbar__link" @click.prevent="click(enlace)"
+               :class="{ active: storeApp.ruta_actual.path == enlace.path }"
+               :aria-current="storeApp.ruta_actual.path == enlace.path ? 'page' : null"
+               :target="enlace.url ? '_blank' : null" :rel="enlace.url ? 'noopener' : null">
+              {{ enlace.title }}
+              <Icon v-if="enlace.url" name="bi-box-arrow-up-right" class="small ms-1" />
+            </a>
           </li>
         </ul>
-      </div>
-    </div>
-
-    <div class="navbar-search-row d-lg-none" v-if="storeApp.ruta_actual.path == '/'">
-      <div class="container py-2">
-        <div class="input-group">
-          <input class="form-control" v-model="termino_busqueda" type="text" placeholder="Por ej: Manzana" aria-label="Buscar"
-            @keyup.enter="buscar">
-          <button class="btn btn-buscar" type="button" @click="buscar" aria-label="Buscar">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.398a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
-            </svg>
+        <div class="pub-topbar__account">
+          <button v-if="!isLogged" class="btn btn-primary btn-sm" type="button" @click="irIngresar">
+            <Icon name="bi-box-arrow-in-right" /> Ingresar
           </button>
+          <template v-else>
+            <button class="btn btn-primary btn-sm" type="button" @click="irDashboard">
+              <Icon name="bi-person-circle" class="me-1" />{{ storeApp.userInfo?.name || 'Mi cuenta' }}
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" title="Cerrar sesión" aria-label="Cerrar sesión" @click="cerrar_sesion">
+              <Icon name="bi-box-arrow-right" />
+            </button>
+          </template>
         </div>
       </div>
-    </div>
-  </nav>
+    </nav>
+  </header>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watchEffect, watch } from 'vue'
 
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
@@ -85,6 +77,12 @@ const isLogged = !!getToken()
 
 const termino_busqueda = ref('')
 const termino_filtro = ref('')
+const scrolled = ref(false)
+const menuAbierto = ref(false)
+
+function onScroll(){ scrolled.value = (window.scrollY || 0) > 8 }
+function onKey(e){ if (e.key === 'Escape') menuAbierto.value = false }
+watch(() => route.path, () => { menuAbierto.value = false })
 
 const enlaces = ref([
     { path: '/', title: 'Buscador' },
@@ -93,7 +91,6 @@ const enlaces = ref([
     { path: '/carga_precio', title: 'Carga de Precios' },
     //{ path: '/estadisticas', title: 'Estadísticas' }, // <--- ENLACE COMENTADO TEMPORALMENTE
     //{ path: '/calcula_trueque', title: 'Calcula Trueque' },
-    { path: '/aporta', url: "https://cafecito.app/tandil_precios", title: 'Quiero Aportar' }
 ])
 
 watchEffect(() => {
@@ -106,6 +103,7 @@ function click( item ){
       return
     }
 
+    menuAbierto.value = false
     storeApp.ruta_actual = item
     router.push(item.path)
 }
@@ -146,102 +144,82 @@ function agregar(){
 onMounted(()=>{
     storeApp.ruta_actual['path'] = route.path
     document.body.classList.add('cls-public')
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('keydown', onKey)
 })
 
 onBeforeUnmount(()=>{
     document.body.classList.remove('cls-public')
+    window.removeEventListener('scroll', onScroll)
+    window.removeEventListener('keydown', onKey)
 })
 </script>
 
-<style>
-.site-navbar {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
-  padding-block: 0.65rem;
-  background-color: rgb(0, 38, 94);
-}
-
-.site-navbar .navbar-brand {
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.navbar-search {
-  width: min(420px, 42vw);
-  margin-inline: auto;
-}
-
-.navbar-filter {
-  width: min(260px, 50vw);
-}
-
-.navbar-search-row {
-  background-color: rgb(0, 38, 94);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.btn-buscar {
-  background-color: #20c997;
-  border-color: #20c997;
-  color: #fff;
-}
-
-.btn-buscar:hover,
-.btn-buscar:focus {
-  background-color: #1aa87f;
-  border-color: #1aa87f;
-  color: #fff;
-}
-
-.btn-cuenta {
-  background-color: #20c997;
-  border-color: #20c997;
-  color: #fff;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-.btn-cuenta:hover,
-.btn-cuenta:focus {
-  background-color: #1aa87f;
-  border-color: #1aa87f;
-  color: #fff;
-}
-
-.btn-logout {
-  background-color: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #fff;
-  border-radius: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0.45rem 0.6rem;
-}
-
-.btn-logout:hover,
-.btn-logout:focus {
-  background-color: rgba(220, 53, 69, 0.85);
-  border-color: #dc3545;
-  color: #fff;
-}
-
-.site-navbar .nav-link {
-  cursor: pointer;
-  color: #cfcfcf;
-  transition: color 0.15s ease;
-}
-
-.site-navbar .nav-link:hover {
-  color: #fff;
-}
-
-.site-navbar .nav-link.active {
-  color: #fff;
-  box-shadow: inset 0 -2px 0 #20c997;
-}
-
-@media (max-width: 991.98px) {
-  body.cls-search-row #buscador-cnt {
-    margin-top: 8.5rem;
+<style lang="scss">
+.pub-topbar {
+  position: fixed; inset: 0 0 auto 0; z-index: 1030;
+  background: var(--gb-surface);
+  border-bottom: 1px solid transparent;
+  transition: background var(--gb-transition), box-shadow var(--gb-transition), border-color var(--gb-transition);
+  &.is-scrolled {
+    background: color-mix(in srgb, var(--gb-surface) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom-color: var(--gb-border);
+    box-shadow: var(--gb-shadow-sm);
   }
+  &__inner { display: flex; align-items: center; flex-wrap: wrap; gap: var(--gb-space-3); min-height: 4rem; }
+  &__brand {
+    display: flex; align-items: center; gap: .5rem;
+    font-weight: 700; font-size: 1.0625rem; color: var(--gb-heading); text-decoration: none;
+    &:hover { color: var(--gb-heading); }
+    &:focus-visible { outline: 0; box-shadow: var(--gb-focus-ring); border-radius: var(--gb-radius-sm); }
+  }
+  &__logo {
+    width: 2rem; height: 2rem; border-radius: var(--gb-radius-sm);
+    display: grid; place-items: center;
+    background: var(--gb-primary); color: var(--gb-on-primary);
+  }
+  &__search {
+    align-items: center; gap: .5rem;
+    width: min(340px, 30vw);
+    padding: 0 .75rem; height: 2.25rem;
+    border-radius: var(--gb-radius-pill);
+    background: var(--gb-surface-2); border: 1px solid var(--gb-border);
+    &:focus-within { box-shadow: var(--gb-focus-ring); border-color: var(--gb-primary); }
+    input { border: 0; outline: 0; background: transparent; flex: 1; min-width: 0; color: var(--gb-text); font-size: .9rem; }
+  }
+  &__search-icon { color: var(--gb-text-muted); }
+  &__toggler {
+    width: 2.5rem; height: 2.5rem; display: grid; place-items: center;
+    border: 1px solid var(--gb-border); border-radius: var(--gb-radius-sm);
+    background: var(--gb-surface); color: var(--gb-heading);
+    &:focus-visible { outline: 0; box-shadow: var(--gb-focus-ring); }
+  }
+  &__nav {
+    display: flex; align-items: center; gap: var(--gb-space-4);
+    @media (max-width: 991.98px) {
+      display: none; flex-basis: 100%; flex-direction: column; align-items: stretch;
+      padding: var(--gb-space-2) 0 var(--gb-space-4);
+      &.is-open { display: flex; }
+    }
+  }
+  &__links {
+    list-style: none; margin: 0; padding: 0; display: flex; gap: .25rem;
+    @media (max-width: 991.98px) { flex-direction: column; }
+  }
+  &__link {
+    display: block; padding: .5rem .75rem; border-radius: var(--gb-radius-sm);
+    color: var(--gb-text-muted); font-weight: 500; text-decoration: none;
+    transition: color var(--gb-transition-fast), background var(--gb-transition-fast);
+    &:hover { color: var(--gb-heading); background: var(--gb-surface-2); }
+    &:focus-visible { outline: 0; box-shadow: var(--gb-focus-ring); }
+    &.active { color: var(--gb-primary); background: var(--gb-primary-soft); font-weight: 600; }
+  }
+  &__account { display: flex; gap: .5rem; align-items: center;
+    @media (max-width: 991.98px) { padding-top: var(--gb-space-3); border-top: 1px solid var(--gb-border); } }
+  @media (min-width: 992px) { &__nav { margin-left: auto; } }
 }
+.navbar-filter { width: min(240px, 40vw); }
 </style>

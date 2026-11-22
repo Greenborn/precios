@@ -1,37 +1,79 @@
 <template>
-    <div class="row align-items-center justify-content-center">
-        <div class="col-12 col-md-10 col-lg-8">
-            <h4>{{ parametros?.item?.products?.name }} - {{ parametros?.item?.nombre_comercio }}{{ parametros?.item?.empresa?.name }}</h4>
+<div class="evo">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+        <div>
+            <h2 class="fs-5 mb-1">{{ parametros?.item?.products?.name }}</h2>
+            <p class="gb-text-muted small mb-0"><Icon name="bi-shop" /> {{ parametros?.item?.nombre_comercio }}{{ parametros?.item?.empresa?.name }}</p>
+        </div>
+        <div class="pub-chips" role="group" aria-label="Rango de fechas" v-if="serie.labels.length > 7">
+            <button v-for="r in RANGOS" :key="r.dias" type="button" class="pub-chip"
+                    :aria-pressed="rango == r.dias ? 'true' : 'false'" @click="rango = r.dias">{{ r.label }}</button>
         </div>
     </div>
-    
-    <div class="row align-items-center justify-content-center">
-        <div class="col-12">
-            <Chart type="line" :data="chartData" :options="chartOptions" class="w-100" />
-        </div>
+
+    <div class="pub-grid pub-grid--stats mb-3">
+        <StatCard label="Precio actual" icon="bi-tag" :value="kpis.actual" :delta="kpis.delta" invertColors hint="en el período" />
+        <StatCard label="Mínimo" icon="bi-arrow-down" tone="success" :value="kpis.min" />
+        <StatCard label="Máximo" icon="bi-arrow-up" tone="danger" :value="kpis.max" />
+        <StatCard label="Registros" icon="bi-calendar3" tone="info" :value="kpis.registros" />
     </div>
+
+    <Card flush>
+        <div class="p-3">
+            <EmptyState v-if="!chartData.labels.length" size="sm" title="Sin historial de precios" />
+            <Chart v-else type="line" :data="chartData" :options="chartOptions" height="360px" class="w-100" />
+        </div>
+    </Card>
+</div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import {  fechaDateToString, fechaStringToDate } from '../../helpers/formatter'
+import { ref, computed, onMounted } from 'vue'
+import {  fechaDateToString, fechaStringToDate, formatMoney } from '../../helpers/formatter'
+import { CHART_COLORS, alpha } from '../../utils/chartTheme'
 
 const props = defineProps(['parametros'])
 
-const chartData = ref({
-        labels: [],
-        datasets: [
-            {
-                label: 'Precio a lo largo del tiempo',
-                data: [],
-                fill: false,
-                borderColor: "#198754",
-                tension: 0
-            },
-        ]
-    });
+// Serie completa (se calcula una vez en onMounted); chartData aplica el rango elegido
+const serie = ref({ labels: [], data: [], registros: 0 })
+const rango = ref(0)
+const RANGOS = [
+    { dias: 7, label: '7 días' },
+    { dias: 30, label: '30 días' },
+    { dias: 90, label: '90 días' },
+    { dias: 0, label: 'Todo' }
+]
+const chartData = computed(() => {
+    const n = rango.value && serie.value.labels.length > rango.value ? rango.value : serie.value.labels.length
+    return {
+        labels: serie.value.labels.slice(-n),
+        datasets: [{
+            label: 'Precio',
+            data: serie.value.data.slice(-n),
+            borderColor: CHART_COLORS.primary,
+            backgroundColor: alpha(CHART_COLORS.primary, 0.12),
+            fill: true,
+            pointRadius: n > 60 ? 0 : 3,
+            tension: 0
+        }]
+    }
+})
+const kpis = computed(() => {
+    const d = chartData.value.datasets[0].data.map(Number).filter(v => !isNaN(v))
+    if (!d.length) return { actual: '—', min: '—', max: '—', delta: null, registros: serie.value.registros }
+    const first = d[0], last = d[d.length - 1]
+    return {
+        actual: '$ ' + formatMoney(last),
+        min: '$ ' + formatMoney(Math.min(...d)),
+        max: '$ ' + formatMoney(Math.max(...d)),
+        delta: first ? Math.round(((last - first) / first) * 10000) / 100 : null,
+        registros: serie.value.registros
+    }
+})
 const chartOptions = ref({
-    "responsive": true
+    "responsive": true,
+    plugins: { legend: { display: false } },
+    scales: { y: { ticks: { callback: v => '$ ' + Number(v).toLocaleString('es-AR') } } }
 });
 
 
@@ -58,7 +100,6 @@ function insertar_ordenado( array_, elemento, campo = 'price' ){
 function formateaFecha( fecha, time ){
     let hora = new Date(time)
     fecha = new Date(fecha)
-    console.log(fecha, hora)
     fecha.setHours(hora.getHours(), hora.getMinutes(), hora.getSeconds())
     
     return fechaDateToString(new Date(fecha),"/", "dd-mm-YYYY H:M" )
@@ -100,7 +141,6 @@ onMounted(() => {
             data_aux.push( data_set[i-1] )
             
             if (dato1_f.getTime() < dato2_f.getTime() ){
-                console.log(dato1_f.getTime(), dato2_f.getTime())
                 let f_ini = new Date(dato1_f)
                 f_ini.setDate(f_ini.getDate() + 1)
                 while (f_ini.getTime() < dato2_f.getTime()){
@@ -116,7 +156,6 @@ onMounted(() => {
         data_set = data_aux
     }
 
-    chartData.value.labels = labels
-    chartData.value.datasets[0].data = data_set
+    serie.value = { labels, data: data_set, registros: precios.length }
 })
 </script>

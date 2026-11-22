@@ -1,0 +1,57 @@
+// Bootstrap compilado desde SCSS con los tokens de Greenborn.
+@import "./tokens";
+
+$primary:   $gb-primary;
+$secondary: $gb-slate-500;
+$success:   $gb-success;
+$info:      $gb-info;
+$warning:   $gb-warning;
+$danger:    $gb-danger;
+$light:     $gb-slate-100;
+$dark:      $gb-slate-900;
+
+$body-bg:    $gb-bg;
+$body-color: $gb-text;
+$link-color: $gb-brand-700;
+$link-hover-color: $gb-brand-800;
+$border-color: $gb-border;
+$secondary-color: $gb-text-muted;
+
+$font-family-base: $gb-font-sans;
+$font-family-monospace: $gb-font-mono;
+$font-size-base: $gb-font-size-base;
+$font-size-sm: $gb-font-size-sm;
+$font-size-lg: $gb-font-size-lg;
+$line-height-base: $gb-line-height;
+$h1-font-size: $gb-h1;
+$h2-font-size: $gb-h2;
+$h3-font-size: $gb-h3;
+$h4-font-size: $gb-h4;
+$h5-font-size: $gb-h5;
+$h6-font-size: $gb-h6;
+$headings-font-weight: 600;
+$headings-color: $gb-slate-900;
+
+$border-radius:    $gb-radius-sm;
+$border-radius-sm: 6px;
+$border-radius-lg: $gb-radius;
+$border-radius-xl: $gb-radius-lg;
+
+$box-shadow-sm: $gb-shadow-sm;
+$box-shadow:    $gb-shadow;
+$box-shadow-lg: $gb-shadow-lg;
+$enable-shadows: false;
+
+$input-border-color: $gb-slate-300;
+$input-focus-border-color: $gb-brand-500;
+$input-btn-focus-color: rgba($gb-primary, 0.25);
+$input-btn-focus-width: 3px;
+$input-placeholder-color: $gb-slate-400;
+$btn-font-weight: 500;
+$table-hover-bg-factor: 0.04;
+$card-border-color: $gb-border;
+$modal-content-border-radius: $gb-radius-lg;
+$toast-border-radius: $gb-radius;
+
+// Silenciar deprecations de @import de Bootstrap 5.3 en Dart Sass
+@import "bootstrap/scss/bootstrap";

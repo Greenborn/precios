@@ -13,8 +13,8 @@
 
         <div class="row">
           <div class="col my-4">
-            <div v-if="!error_text" class="spinner-border text-success mb-3" role="status"></div>
-            <p v-if="error_text" class="text-danger mb-2">{{ error_text }}</p>
+            <div v-if="!error_text" class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Cargando…</span></div>
+            <p v-if="error_text" class="text-danger mb-2" role="alert">{{ error_text }}</p>
             <p v-else class="text-muted mb-2">Validando sesión, aguardá un momento…</p>
           </div>
         </div>
@@ -81,6 +81,6 @@ function fallo(texto) {
 <style scoped>
 .title {
   font-weight: 700;
-  color: #1f2937;
+  color: var(--gb-heading);
 }
 </style>

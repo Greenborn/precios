@@ -1,29 +1,27 @@
 <template>
-  <div class="row" v-if="abm_listo">
-    <div class="col">
-
-      <Button label="Vincular permiso" icon="pi-link" iconPos="right"
-              class="ms-2"
+  <AbmShell subtitle="Roles, sus permisos y usuarios vinculados.">
+    <template v-if="abm_listo" #actions>
+      <Button label="Vincular permiso" icon="pi-link" variant="outline-secondary"
               @click="vincular_permiso" />
-      <Button label="Vincular usuario" icon="pi-link" iconPos="right"
-              class="ms-2"
+      <Button label="Vincular usuario" icon="pi-link" variant="outline-secondary"
               @click="vincular_permiso" />
-    </div>
-  </div>
+    </template>
 
-  <VteTableEditor
-    ref="table_ref"
-    id="roles"
-    :api="vteApi"
-    :config="vteConfig"
-    @loaded="abm_listo = true"
-    @rowSelected="onRowSelected"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
+    <VteTableEditor
+      ref="table_ref"
+      id="roles"
+      :api="vteApi"
+      :config="vteConfig"
+      @loaded="abm_listo = true"
+      @rowSelected="onRowSelected"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed, onMounted } from 'vue';
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { getAllRoles, crearRol, borrarRol, editarRol, vincularPermiso, getAllPermisos } from '@/api/admin/gestionRBAC'
   import { AppStore } from '@/stores/app'

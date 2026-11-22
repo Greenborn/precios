@@ -3,7 +3,7 @@
 // Flujo: el frontend redirige a {SSO}/auth/google, recibe un token temporal,
 // lo canjea por un bearer token y el backend lo verifica contra {SSO}/auth/verify
 // para luego emitir el JWT local (firmar_token) que consume el middleware RBAC.
-const { createSsoAuth } = require('express-greenborn-sso-back')
+const { createSsoAuth } = require('@greenborn/express-greenborn-sso-back')
 const bcrypt = require('bcrypt')
 const { randomBytes } = require('crypto')
 

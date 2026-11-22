@@ -34,6 +34,7 @@ router.get('/info', async function (req, res) {
     apellido: usuario.apellido || null,
     email: usuario.email,
     rutas: usuario.rutas || [],
+    permisos: usuario.permisos || [],
   })
 })
 

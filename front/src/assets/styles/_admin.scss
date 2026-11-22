@@ -1,0 +1,306 @@
+/* =====================================================================
+   Panel admin (Fase 3)
+   - Sidebar (@greenborn/vue-side-menu) oscuro + modo colapsado a iconos
+   - Restyle de @greenborn/vue-table-editor con tokens
+   - Utilidades de listas en modales admin
+   Todo va prefijado con .admin-shell (raiz de Layout.vue) para no afectar
+   al sitio publico. Se usa un selector de 3 clases para ganarle a los
+   estilos scoped de las librerias sin depender del orden de carga.
+   ===================================================================== */
+
+.admin-shell {
+  --admin-topbar-h: 60px;
+  --admin-sidebar-w: 256px;
+  --admin-sidebar-w-collapsed: 72px;
+  --admin-sidebar-text: rgba(226, 232, 240, 0.78);
+  --admin-sidebar-hover: rgba(255, 255, 255, 0.06);
+}
+
+/* ---------- Skip link ---------- */
+.admin-skip-link {
+  position: fixed;
+  top: -100px;
+  left: var(--gb-space-3);
+  z-index: 2000;
+  padding: var(--gb-space-2) var(--gb-space-3);
+  background: var(--gb-primary);
+  color: var(--gb-on-primary);
+  border-radius: var(--gb-radius-sm);
+  text-decoration: none;
+  &:focus { top: var(--gb-space-2); }
+}
+
+/* ---------- Sidebar ---------- */
+.admin-shell .vsm .vsm-sidebar {
+  top: var(--admin-topbar-h);
+  height: calc(100% - var(--admin-topbar-h));
+  width: var(--admin-sidebar-w);
+  padding: var(--gb-space-4) var(--gb-space-3);
+  background: var(--gb-sidebar-bg);
+  background-image: linear-gradient(180deg, rgba(22, 163, 74, 0.08), transparent 220px);
+  color: var(--admin-sidebar-text);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform var(--gb-transition-slow), width var(--gb-transition), visibility var(--gb-transition-slow);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.admin-shell .vsm .vsm-overlay {
+  top: var(--admin-topbar-h);
+  height: calc(100% - var(--admin-topbar-h));
+  background: var(--gb-overlay);
+}
+
+.admin-shell .vsm .vsm-header {
+  margin: 0 0 var(--gb-space-3);
+  padding: 0 var(--gb-space-3);
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.admin-shell .vsm .vsm-item { margin-bottom: 2px; }
+
+.admin-shell .vsm .vsm-link {
+  display: flex;
+  align-items: center;
+  gap: var(--gb-space-3);
+  padding: 0.55rem var(--gb-space-3);
+  border-left: 0;
+  border-radius: var(--gb-radius-sm);
+  color: var(--admin-sidebar-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  position: relative;
+  transition: background-color var(--gb-transition-fast), color var(--gb-transition-fast);
+
+  > i:first-child {
+    margin: 0;
+    font-size: 1.1rem;
+    width: 1.25rem;
+    text-align: center;
+    flex-shrink: 0;
+    opacity: 0.9;
+  }
+
+  &:hover { background: var(--admin-sidebar-hover); color: var(--gb-on-primary); }
+  &:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
+
+  &.router-link-active,
+  &.router-link-exact-active {
+    background: rgba(22, 163, 74, 0.18);
+    color: var(--gb-on-primary);
+    font-weight: 600;
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 20%;
+      bottom: 20%;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--gb-primary);
+    }
+    > i:first-child { color: var(--gb-brand-accent-light); opacity: 1; }
+  }
+}
+
+.admin-shell .vsm .vsm-submenu-toggle .vsm-caret {
+  margin-left: auto;
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.admin-shell .vsm .vsm-nav.vsm-submenu {
+  margin: 2px 0 var(--gb-space-2) 1.35rem;
+  padding-left: var(--gb-space-2);
+  border-left: 1px solid rgba(148, 163, 184, 0.2);
+  .vsm-link { font-size: 0.85rem; padding-block: 0.45rem; }
+}
+
+.admin-shell .vsm .vsm-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 0.75rem;
+  padding-top: var(--gb-space-3);
+}
+
+/* Colapsado a iconos (solo desktop) */
+@media (min-width: 768px) {
+  .admin-shell--collapsed .vsm .vsm-sidebar {
+    width: var(--admin-sidebar-w-collapsed);
+    padding-inline: var(--gb-space-2);
+    overflow-x: hidden;
+  }
+  .admin-shell--collapsed .vsm .vsm-header { visibility: hidden; height: 0.5rem; margin-bottom: var(--gb-space-2); }
+  .admin-shell--collapsed .vsm .vsm-link {
+    justify-content: center;
+    font-size: 0;            /* oculta el texto (nodo de texto sin wrapper) */
+    gap: 0;
+    padding-inline: 0;
+    > i:first-child { font-size: 1.2rem; }
+  }
+  .admin-shell--collapsed .vsm .vsm-caret { display: none; }
+  .admin-shell--collapsed .vsm .vsm-nav.vsm-submenu {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+    padding-top: 2px;
+  }
+  .admin-shell--collapsed .vsm .vsm-footer { font-size: 0.625rem; }
+}
+
+/* ---------- vue-table-editor ---------- */
+.admin-shell .app-content .te-wrapper {
+  font-size: 0.875rem;
+  color: var(--gb-text);
+}
+
+.admin-shell .app-content .te-toolbar {
+  background: var(--gb-surface);
+  border: 0;
+  border-bottom: 1px solid var(--gb-border);
+  border-radius: 0;
+  padding: var(--gb-space-3) var(--gb-space-4);
+  gap: var(--gb-space-3);
+}
+
+.admin-shell .app-content .te-scroll-wrap {
+  background: var(--gb-surface);
+  border: 0;
+}
+
+.admin-shell .app-content .te-header-row .te-th {
+  background: var(--gb-surface-2);
+  color: var(--gb-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-right: 0;
+  border-bottom: 1px solid var(--gb-border);
+  box-shadow: none;
+}
+.admin-shell .app-content .te-th-label:hover,
+.admin-shell .app-content .te-th-sorted { color: var(--gb-primary); }
+
+.admin-shell .app-content .te-td {
+  border-right: 0;
+  border-bottom: 1px solid var(--gb-border);
+  padding-block: 0.6rem;
+}
+.admin-shell .app-content .te-striped .te-tr:nth-child(2n) { background: transparent; }
+.admin-shell .app-content .te-tr:hover { background: var(--gb-surface-2) !important; }
+.admin-shell .app-content .te-tr.te-tr-highlight { background: var(--gb-primary-soft) !important; color: var(--gb-text); }
+.admin-shell .app-content .te-tr.te-tr-selected td {
+  background: var(--gb-primary-soft);
+  &:first-child { box-shadow: inset 3px 0 0 var(--gb-primary); }
+}
+
+.admin-shell .app-content .te-search-input,
+.admin-shell .app-content .te-filter-input {
+  height: var(--gb-control-height-sm);
+  border: 1px solid var(--gb-border-strong);
+  border-radius: var(--gb-radius-sm);
+  background: var(--gb-surface);
+  color: var(--gb-text);
+  font-size: 0.85rem;
+  &:focus { border-color: var(--gb-primary); box-shadow: var(--gb-focus-ring); }
+}
+.admin-shell .app-content .te-search-input { min-width: 220px; padding-left: 2rem; }
+.admin-shell .app-content .te-search-icon { color: var(--gb-text-muted); left: 0.65rem; }
+
+.admin-shell .app-content .te-btn {
+  height: var(--gb-control-height-sm);
+  padding: 0 0.85rem;
+  border-radius: var(--gb-radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  &:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
+}
+.admin-shell .app-content .te-btn-success,
+.admin-shell .app-content .te-btn-primary {
+  background: var(--gb-primary);
+  border-color: var(--gb-primary);
+  color: var(--gb-on-primary);
+  &:hover:not(:disabled) { background: var(--gb-primary-hover); border-color: var(--gb-primary-hover); }
+}
+.admin-shell .app-content .te-btn-warning,
+.admin-shell .app-content .te-btn-secondary,
+.admin-shell .app-content .te-btn-info {
+  background: var(--gb-surface);
+  border-color: var(--gb-border-strong);
+  color: var(--gb-text);
+  &:hover:not(:disabled) { background: var(--gb-surface-2); }
+}
+.admin-shell .app-content .te-btn-danger {
+  background: var(--gb-surface);
+  border-color: var(--gb-border-strong);
+  color: var(--gb-danger);
+  &:hover:not(:disabled) { background: var(--gb-danger-soft); border-color: var(--gb-danger); }
+}
+
+.admin-shell .app-content .te-paginator {
+  background: var(--gb-surface);
+  border: 0;
+  border-top: 1px solid var(--gb-border);
+  border-radius: 0;
+  padding: var(--gb-space-2) var(--gb-space-4);
+}
+.admin-shell .app-content .te-page-info { color: var(--gb-text-muted); }
+.admin-shell .app-content .te-page-btn {
+  min-width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--gb-border);
+  border-radius: var(--gb-radius-sm);
+  background: var(--gb-surface);
+  color: var(--gb-text);
+  &:hover:not(:disabled) { background: var(--gb-surface-2); }
+}
+
+.admin-shell .app-content .te-empty {
+  color: var(--gb-text-muted);
+  padding: var(--gb-space-7) var(--gb-space-4);
+  &::before {
+    content: '\f42d'; /* bi-inbox */
+    font-family: 'bootstrap-icons';
+    display: block;
+    font-size: 2.25rem;
+    margin-bottom: var(--gb-space-2);
+    color: var(--gb-border-strong);
+  }
+}
+.admin-shell .app-content .te-loading-overlay {
+  background: color-mix(in srgb, var(--gb-surface) 70%, transparent);
+}
+
+/* ---------- Listas dentro de modales admin ---------- */
+.productos-item {
+  border-bottom: 1px solid var(--gb-border);
+  border-radius: var(--gb-radius-sm);
+  transition: background-color var(--gb-transition-fast);
+  &:hover { background: var(--gb-surface-2); }
+}
+
+/* ---------- Responsive: tablas con scroll horizontal en mobile ---------- */
+.admin-shell .app-content .te-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr); // evita que la tabla ensanche la grilla
+}
+.admin-shell .app-content .te-scroll-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 575.98px) {
+  .admin-shell .app-content .te-search-input { min-width: 0; width: 100%; }
+  .admin-shell .app-content .te-toolbar-end { white-space: normal; flex-wrap: wrap; }
+}

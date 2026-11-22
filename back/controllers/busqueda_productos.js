@@ -1,9 +1,18 @@
 let lst_letras = {}
 
+// Normalización común para índice y término: minúsculas, sin diacríticos
+// (salvo ñ) y espacios colapsados. Debe ser la misma en ambos lados para que
+// "azucar" encuentre "Azúcar".
+function normalizar(texto) {
+    return String(texto || '').normalize('NFD')
+        .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi, "$1")
+        .normalize().toLowerCase().replace(/\s+/g, ' ').trim()
+}
+exports.normalizar = normalizar
+
 function obtener_propiedades(name) {
     let letras = {}
-    // Convertir a minúsculas para búsqueda case-insensitive
-    const nameLower = name.toLowerCase()
+    const nameLower = normalizar(name)
 
     for (let i = 0; i < nameLower.length; i++) {
         if (!letras[nameLower[i]])
@@ -18,6 +27,10 @@ exports.inicializa_buscador = async function() {
 
     console.log('Generando estructura de busqueda')
 
+    // Se reconstruye desde cero: regenerar_diccionarios se invoca en caliente
+    // (ABM alias, categorías, comercios) y sin reset se duplicaban entradas.
+    const nuevo_indice = {}
+
     // Usar price_today para inicializar el buscador
     const productosHoy = await global.knex('price_today').select()
         .orderBy('date_time', 'desc')
@@ -25,7 +38,8 @@ exports.inicializa_buscador = async function() {
         .where('price', '<>', 0)
     for (let i = 0; i < productosHoy.length; i++) {
         const nombre = productosHoy[i].product_name
-        const nombreLower = nombre.toLowerCase()  // Para indexación
+        if (!nombre) continue
+        const nombreLower = normalizar(nombre)  // Para indexación
         let props = obtener_propiedades(nombre)
         let aux = {
             'dsc':        props,
@@ -44,11 +58,12 @@ exports.inicializa_buscador = async function() {
         let o_k = Object.keys(props)
         for (let j = 0; j < o_k.length; j++) {
             const LETRA_NOMBRE = o_k[j]
-            if(!lst_letras[ LETRA_NOMBRE ])
-                lst_letras[ LETRA_NOMBRE ] = []
-            lst_letras[ LETRA_NOMBRE ].push(aux)
+            if(!nuevo_indice[ LETRA_NOMBRE ])
+                nuevo_indice[ LETRA_NOMBRE ] = []
+            nuevo_indice[ LETRA_NOMBRE ].push(aux)
         }
     }
+    lst_letras = nuevo_indice
     console.log('estructura de busqueda generada basada en price_today.')
 }
 
@@ -58,9 +73,12 @@ exports.inicializa_buscador = async function() {
  * @param {number} branch_id - ID de la sucursal
  */
 exports.eliminar_de_buscador = function(product_id, branch_id) {
+    // Comparación por String: los ids llegan como number o string según el origen
+    const pid = String(product_id)
+    const bid = String(branch_id)
     for (let letra in lst_letras) {
-        lst_letras[letra] = lst_letras[letra].filter(item => 
-            !(item.product_id === product_id && item.branch_id === branch_id)
+        lst_letras[letra] = lst_letras[letra].filter(item =>
+            !(String(item.product_id) === pid && String(item.branch_id) === bid)
         )
         // Limpiar arrays vacíos para optimizar memoria
         if (lst_letras[letra].length === 0) {
@@ -93,7 +111,7 @@ exports.agregar_a_buscador = function(producto) {
 
     // Crear la nueva entrada
     const nombre = producto.product_name
-    const nombreLower = nombre.toLowerCase()  // Para búsqueda case-insensitive
+    const nombreLower = normalizar(nombre)
     let props = obtener_propiedades(nombre)
     let aux = {
         'dsc':        props,
@@ -125,10 +143,28 @@ exports.agregar_a_buscador = function(producto) {
 }
 
 
+/**
+ * Quita del índice las entradas con date_time anterior a `limite`, igual que la
+ * limpieza de price_today (ventana hoy+ayer) que hacen los importadores en BD.
+ */
+exports.purgar_anteriores = function(limite) {
+    const lim = new Date(limite).getTime()
+    let quitados = new Set()
+    for (let letra in lst_letras) {
+        lst_letras[letra] = lst_letras[letra].filter(item => {
+            const t = new Date(item.date_time).getTime()
+            if (!isNaN(t) && t < lim) { quitados.add(item); return false }
+            return true
+        })
+        if (lst_letras[letra].length === 0) delete lst_letras[letra]
+    }
+    return [...quitados]
+}
+
 exports.busqueda = async function( termino, limit = -1 ) {
-    // Convertir término de búsqueda a minúsculas para búsqueda case-insensitive
-    termino = termino.toLowerCase()
-    let palabras = termino.split(" ")
+    termino = normalizar(termino)
+    let palabras = termino.split(" ").filter(p => p.length > 0)
+    if (palabras.length === 0) return []
     let encontrados = []
     let encontrados_k = []
     const p_letra = termino[0]
@@ -145,7 +181,8 @@ exports.busqueda = async function( termino, limit = -1 ) {
             if (!e_actual.dsc[primera_letra])
                 continue
             const posiciones_letras = e_actual.dsc[primera_letra]
-            for (let NUM_APARICION = 0; NUM_APARICION < posiciones_letras.length; NUM_APARICION++) {
+            let encontrado = false
+            for (let NUM_APARICION = 0; NUM_APARICION < posiciones_letras.length && !encontrado; NUM_APARICION++) {
                 let POS_T = 0
                 // Usar nameLower para comparación case-insensitive
                 for (let POS_LETRA = posiciones_letras[NUM_APARICION]; POS_LETRA < e_actual.nameLower.length; POS_LETRA++) {
@@ -169,6 +206,7 @@ exports.busqueda = async function( termino, limit = -1 ) {
                             'user_apellido':e_actual.user_apellido || null
                         })
                         encontrados.push(e_actual)
+                        encontrado = true  // una sola vez por entrada aunque la palabra aparezca repetida
                         break
                     }
                 }

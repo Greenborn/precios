@@ -28,7 +28,19 @@ const PI_TO_BI = {
   'pi-chart-line': 'bi-graph-up',
   'pi-list': 'bi-list',
   'pi-table': 'bi-table',
-  'pi-address-book': 'bi-journal-bookmark'
+  'pi-address-book': 'bi-journal-bookmark',
+  'pi-refresh': 'bi-arrow-clockwise',
+  'pi-filter': 'bi-funnel',
+  'pi-download': 'bi-download',
+  'pi-upload': 'bi-upload',
+  'pi-info-circle': 'bi-info-circle',
+  'pi-exclamation-triangle': 'bi-exclamation-triangle',
+  'pi-check-circle': 'bi-check-circle',
+  'pi-times-circle': 'bi-x-circle',
+  'pi-inbox': 'bi-inbox',
+  'pi-arrow-up': 'bi-arrow-up',
+  'pi-arrow-down': 'bi-arrow-down',
+  'pi-cog': 'bi-gear'
 }
 
 export function piToBi(name) {
@@ -37,5 +49,7 @@ export function piToBi(name) {
   if (n.startsWith('pi-')) {
     return PI_TO_BI[n] || 'bi-circle-fill'
   }
+  // Permite pasar 'house' además de 'bi-house'
+  if (n && !n.startsWith('bi-') && !n.includes(' ')) return 'bi-' + n
   return n
 }

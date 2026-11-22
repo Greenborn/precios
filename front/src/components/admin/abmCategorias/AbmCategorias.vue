@@ -1,15 +1,26 @@
 <template>
-  <div class="abm-categorias">
-    <div class="mb-2 d-flex align-items-center flex-wrap gap-1">
-      <Button label="Nueva" icon="pi-plus" @click="accion_crear" />
-      <Button label="Editar" icon="pi-pencil" class="ms-1" :disabled="!seleccionado" @click="crud.editarFila" />
-      <Button label="Borrar" icon="pi-trash" class="ms-1" :disabled="!seleccionado" @click="accion_borrar" />
-      <Button label="Productos" icon="pi-list" class="ms-1" :disabled="!seleccionado" @click="productos" />
-      <Button label="Alias" icon="pi-tag" class="ms-1" :disabled="!seleccionado" @click="alias" />
-      <InputText v-model="filtro" class="filtro-nombre ms-auto" placeholder="Filtrar por nombre..." @input="on_filtro" />
-    </div>
-    <CategoriasArbol ref="arbol_ref" class="abm-categorias__arbol" @rowSelected="onRowSelected" />
-  </div>
+  <AbmShell class="abm-categorias" subtitle="Árbol de categorías del catálogo. Pasá el mouse sobre una categoría para ver sus acciones.">
+    <template #actions>
+      <Button label="Nueva categoría" icon="pi-plus" @click="accion_crear" />
+    </template>
+
+    <template #filters>
+      <div class="d-flex align-items-center flex-wrap gap-2">
+        <div class="filtro-nombre position-relative">
+          <Icon name="bi-search" class="filtro-nombre__icon" />
+          <InputText v-model="filtro" class="w-100 ps-5" placeholder="Buscar categoría por nombre..." aria-label="Buscar categoría por nombre" @input="on_filtro" />
+        </div>
+        <div class="d-flex flex-wrap gap-1 ms-md-auto">
+          <Button label="Editar" icon="pi-pencil" variant="outline-secondary" size="sm" :disabled="!seleccionado" @click="crud.editarFila" />
+          <Button label="Productos" icon="pi-list" variant="outline-secondary" size="sm" :disabled="!seleccionado" @click="productos" />
+          <Button label="Alias" icon="pi-tag" variant="outline-secondary" size="sm" :disabled="!seleccionado" @click="alias" />
+          <Button label="Borrar" icon="pi-trash" variant="outline-danger" size="sm" :disabled="!seleccionado" @click="accion_borrar" />
+        </div>
+      </div>
+    </template>
+
+    <CategoriasArbol ref="arbol_ref" class="abm-categorias__arbol" acciones @rowSelected="onRowSelected" @accion="on_accion_nodo" />
+  </AbmShell>
 </template>
 
 <script setup>
@@ -19,6 +30,7 @@
   import ProductosCategoria from './ProductosCategoria.vue'
   import AliasCategoria from './AliasCategoria.vue'
   import CategoriasArbol from './CategoriasArbol.vue'
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { AppStore } from '@/stores/app'
 
   const storeApp = AppStore()
@@ -88,6 +100,15 @@
     seleccionado.value = sel
   }
 
+  // Acciones on-hover del arbol: seleccionan el nodo y reusan las acciones existentes
+  function on_accion_nodo({ accion, nodo }) {
+    seleccionado.value = nodo
+    if (accion === 'editar') crud.editarFila()
+    else if (accion === 'productos') productos()
+    else if (accion === 'alias') alias()
+    else if (accion === 'borrar') accion_borrar && accion_borrar()
+  }
+
   let timer_filtro = null
   function on_filtro() {
     clearTimeout(timer_filtro)
@@ -96,19 +117,21 @@
 </script>
 
 <style scoped>
-  .abm-categorias {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
   .abm-categorias__arbol {
     flex: 1;
     min-height: 0;
   }
 
   .filtro-nombre {
-    max-width: 320px;
+    max-width: 360px;
     width: 100%;
+  }
+  .filtro-nombre__icon {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gb-text-muted);
+    pointer-events: none;
   }
 </style>

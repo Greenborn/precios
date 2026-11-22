@@ -1,12 +1,13 @@
 <template>
-  <div class="row">
-    <div class="col-12 col-sm-10 col-md-9 col-lg-6 p-5">
+  <AbmShell title="Mi cuenta" subtitle="Datos personales y contraseña de acceso." icon="bi-person-gear" :fill="false" :flush="false">
+    <div class="cuenta-form">
       <FormularioGenerico ref="ref_formulario" :parametros="config_formulario"></FormularioGenerico>
     </div>
-  </div>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, onMounted } from 'vue';
   import  FormularioGenerico  from '@/components/genericos/FormularioGenerico'
   import { guardarConfig } from '@/api/admin/userAdmin'
@@ -66,5 +67,5 @@
 </script>
 
 <style scoped>
-
+.cuenta-form { max-width: 560px; }
 </style>

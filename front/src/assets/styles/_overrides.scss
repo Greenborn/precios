@@ -1,9 +1,9 @@
-// Suggested location to add your overrides so that migration would be easy by just updating the SASS folder in the future
+@use "./tokens" as *;
+
 .input-group .form-control {
-    border-bottom: 2px solid #ced4da;
-    transition: box-shadow 0.2s, border-color 0.2s;
+  transition: box-shadow $gb-transition-fast, border-color $gb-transition-fast;
 }
 .input-group .form-control:focus {
-    box-shadow: 0 0 0 0.2rem rgba(32, 201, 151, 0.25);
-    border-color: #20c997;
+  box-shadow: $gb-focus-ring;
+  border-color: $gb-brand-500;
 }

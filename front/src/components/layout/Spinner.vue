@@ -1,6 +1,7 @@
 <template>
-  <div v-if="loading" class="portal-spinner-content">
+  <div v-if="loading" class="portal-spinner-content" role="status" aria-live="polite">
     <ProgressSpinner :style="styleSpinner" />
+    <span class="visually-hidden">Cargando…</span>
   </div>
 </template>
 
@@ -20,17 +21,12 @@ const props = defineProps({
 <style scoped>
 .portal-spinner-content {
   position: fixed;
-  width: 100vw;
-  background-color: rgba(255,255,255,.8);
-  height: 100vh;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: color-mix(in srgb, var(--gb-surface) 72%, transparent);
+  backdrop-filter: blur(2px);
   z-index: 10000;
-  top: 0px;
-  left: 0px;
-  text-align: center; 
 }
-
-.spinner{
-  height: 100vh;
-}
-
 </style>

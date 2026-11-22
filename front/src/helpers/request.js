@@ -14,7 +14,6 @@ const create = function( url,  with_credentials=true){
   
     config => {
       const token = getToken();
-      //console.log(token)
       if (token !== null) {
         config.headers['x-api-key'] = token
       }
@@ -23,7 +22,7 @@ const create = function( url,  with_credentials=true){
     error => {
   
       // do something with request error
-      console.log("request err", error) // for debug
+      console.error("request err", error)
       return Promise.reject(error)
     }
   )
@@ -44,15 +43,13 @@ const create = function( url,  with_credentials=true){
       //loadingInstance.close()
   
       const res = response.data
-      //console.log("resdata", res)
   
       // if the custom code is not 20000, it is judged as an error.
-      // console.log(res)
       return res
   
     },
     error => {
-      console.log('err' + error) // for debug
+      console.error("response err", error)
       const res = { error: true, msg: error }
       return res
     }

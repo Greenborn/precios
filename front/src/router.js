@@ -27,6 +27,16 @@ export const routes = [
     component: () => import("./pages/Novedades.vue"),
   },
   {
+    path: "/privacidad",
+    name: "privacidad",
+    component: () => import("./pages/PoliticaPrivacidad.vue"),
+  },
+  {
+    path: "/uso-de-datos",
+    name: "uso_datos",
+    component: () => import("./pages/UsoDatos.vue"),
+  },
+  {
     path: "/categorias",
     name: "categorias",
     component: () => import("./pages/NavegaCategorias.vue"),

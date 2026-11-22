@@ -14,23 +14,22 @@
 
     <div class="row mb-1">
       <div class="col-8">
-        <InputText class="w-100" v-model="filtro" placeholder="Filtrar productos de la categoría..." @input="on_filtro" />
+        <InputText class="w-100" v-model="filtro" placeholder="Filtrar productos de la categoría..." aria-label="Filtrar productos de la categoría" @input="on_filtro" />
       </div>
       <div class="col-4 text-end">
-        <Button icon="pi pi-refresh" severity="secondary" text @click="cargar" />
+        <Button icon="pi pi-refresh" severity="secondary" text ariaLabel="Recargar productos" @click="cargar" />
       </div>
     </div>
 
     <div class="productos-list">
-      <div v-if="cargando" class="text-center p-2">
-        <i class="pi pi-spinner pi-spin"></i>
+      <div v-if="cargando" class="p-2">
+        <Skeleton :lines="4" />
       </div>
-      <div v-else-if="productos.length === 0" class="text-center p-2 text-muted">
-        Sin productos asociados
-      </div>
-      <div v-for="(p, i) in productos" :key="p.id" class="d-flex align-items-center justify-content-between border-bottom py-1">
+      <EmptyState v-else-if="productos.length === 0" size="sm" icon="bi-box-seam"
+        title="Sin productos asociados" description="Buscá un producto arriba para agregarlo a la categoría." />
+      <div v-for="(p, i) in productos" :key="p.id" class="productos-item d-flex align-items-center justify-content-between py-1 px-2">
         <span>{{ p.name }}</span>
-        <Button icon="pi pi-times" severity="danger" text rounded size="small" @click="quitar(p, i)" />
+        <Button icon="pi pi-times" severity="danger" text rounded size="small" :ariaLabel="'Quitar ' + p.name" @click="quitar(p, i)" />
       </div>
     </div>
   </div>

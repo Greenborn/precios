@@ -34,7 +34,7 @@ async function do_logout( storeApp, router ){
     setUserInfo( 'admin', storeApp, undefined, router, null)
     router.replace({ path: '/' })
   } else {
-    console.log('No se pudo cerrar sessión')
+    console.warn('No se pudo cerrar sesión')
   }
 }
 
@@ -215,7 +215,6 @@ function actualizar_rutas( router, storeApp){
   
   if (!router.hasRoute('redirect_404'))
     router.addRoute({ path: '/:error*', name:'redirect_404', redirect: '/', hidden: true })
-//console.log(router.getRoutes())
 }
 
 function getTipoUsuarioFURL(){

@@ -160,7 +160,6 @@
       props.parametros.guardado( res_peticion )
     } else {
       storeApp.loading = false
-      console.log('error!')
     }
   }
 

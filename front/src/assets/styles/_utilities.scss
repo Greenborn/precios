@@ -1,0 +1,44 @@
+// Clases utilitarias gb-*
+.gb-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.gb-text-muted { color: var(--gb-text-muted) !important; }
+.gb-bg-surface-2 { background: var(--gb-surface-2) !important; }
+.gb-surface {
+  background: var(--gb-surface);
+  border: 1px solid var(--gb-border);
+  border-radius: var(--gb-radius);
+}
+.gb-shadow-sm { box-shadow: var(--gb-shadow-sm) !important; }
+.gb-shadow    { box-shadow: var(--gb-shadow) !important; }
+.gb-shadow-lg { box-shadow: var(--gb-shadow-lg) !important; }
+.gb-rounded-sm { border-radius: var(--gb-radius-sm) !important; }
+.gb-rounded    { border-radius: var(--gb-radius) !important; }
+.gb-rounded-lg { border-radius: var(--gb-radius-lg) !important; }
+.gb-hover-lift {
+  transition: transform var(--gb-transition), box-shadow var(--gb-transition);
+  &:hover { transform: translateY(-2px); box-shadow: var(--gb-shadow); }
+}
+.gb-focus-ring:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
+.gb-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+// Campo de formulario (wrapper usado por InputText/Select/etc.)
+.gb-field { display: flex; flex-direction: column; gap: 0.3rem; width: 100%; }
+.gb-field__label { font-size: var(--gb-font-size-sm, 0.8125rem); font-weight: 500; color: var(--gb-text); margin: 0; }
+.gb-field__required { color: var(--gb-danger); margin-left: 2px; }
+.gb-field__help { font-size: 0.78rem; color: var(--gb-text-muted); }
+.gb-field__error { font-size: 0.78rem; color: var(--gb-danger); }
+
+// Alturas consistentes de controles
+.form-control:not(textarea):not(.form-control-sm):not(.form-control-lg),
+.form-select:not(.form-select-sm):not(.form-select-lg) {
+  min-height: var(--gb-control-height);
+}
+.form-control, .form-select {
+  transition: border-color var(--gb-transition-fast), box-shadow var(--gb-transition-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

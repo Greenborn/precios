@@ -13,17 +13,15 @@ async function hacer_busqueda( termino, metodo ){
       let productos = await busqueda_productos.busqueda(termino, 200)      
 
       if (productos){
-        console.log("Cant encontrados ", productos.length)
 
-        for (let i=0; i < productos.length; i++){
-          let result_precio = productos[i]
-
-          result_precio["empresa"]  = global.enterprice_diccio[global.branchs_diccio[result_precio["branch_id"]].enterprise_id]
-          result_precio["locales"]  = global.branch_enterprice_diccio[global.branchs_diccio[result_precio["branch_id"]].enterprise_id]
-          //result_precio["products"] = diccio_productos[result_precio["product_id"]]
-        }
-
-        resolve(productos)
+        // Una sucursal faltante en el diccionario no debe tirar abajo toda la búsqueda
+        // Ventana hoy+ayer aplicada al responder (la purga del índice corre cada 15 min)
+        const desde = inicio_de_ayer().getTime()
+        resolve(productos.filter(p => {
+          if (!global.branchs_diccio[Number(p.branch_id)]) return false
+          const t = new Date(p.date_time).getTime()
+          return isNaN(t) || t >= desde
+        }))
       }
 
     } catch (error) {
@@ -124,51 +122,96 @@ function nombre_producto_filtrado( nombre ){
   let nuevo_termino = nuevo.join(" ")
 
   let alias = global.alias_busqueda[nuevo_termino.toLowerCase()]
-  console.log(alias)
   return alias != undefined ? alias : nuevo_termino
 }
 
-router.get('/precios', async function (req, res) {
-  console.log("query ", req.query)
+// Registro de historial sin bloquear la respuesta (los resultados salen de memoria)
+function registrar_historial(query, cant, req) {
+  global.knex('search_query_history')
+    .insert({
+      "query": query,
+      "date": new Date().toISOString().replace('T', ' ').replace('Z', ''),
+      "cant_results": cant,
+      "ipv4": req.header('x-forwarded-for')
+    })
+    .catch(err => console.log('[busqueda] error registrando historial', err.message))
+}
 
+// Ventana de vigencia común a precios y ofertas: hoy + ayer (margen de un día)
+function inicio_de_ayer() {
+  let d = new Date()
+  d.setHours(0,0,0,0)
+  d.setDate(d.getDate() - 1)
+  return d
+}
+
+const CANTIDAD_DEFECTO = 30
+const CANTIDAD_MAX = 100
+const ORDENES = ['relevancia', 'precio_asc', 'precio_desc']
+
+// Completa empresa y locales solo para los ítems que se devuelven
+function enriquecer(items) {
+  for (const item of items) {
+    if (item.empresa) continue
+    const branch = global.branchs_diccio[Number(item.branch_id)]
+    if (!branch) continue
+    item.empresa = global.enterprice_diccio[Number(branch.enterprise_id)]
+    item.locales = global.branch_enterprice_diccio[Number(branch.enterprise_id)]
+  }
+  return items
+}
+
+function ordenar(items, orden) {
+  if (orden === 'relevancia' || !ORDENES.includes(orden)) return items
+  const f = orden === 'precio_asc' ? 1 : -1
+  return [...items].sort((a, b) => {
+    const pa = Number(a?.price), pb = Number(b?.price)
+    if (pa == -1) return 1
+    if (pb == -1) return -1
+    return ((pa - pb) * f) || String(a?.id).localeCompare(String(b?.id))
+  })
+}
+
+// Paginación: si no se envía `pagina` se devuelve todo (compatibilidad con
+// consumidores existentes, p. ej. Calculadora de Trueque).
+function paginar(items, query) {
+  const total = items.length
+  if (query?.pagina === undefined)
+    return { items, total, pagina: 1, hay_mas: false }
+
+  const pagina = Math.max(1, parseInt(query.pagina) || 1)
+  const cantidad = Math.min(CANTIDAD_MAX, Math.max(1, parseInt(query.cantidad) || CANTIDAD_DEFECTO))
+  const desde = (pagina - 1) * cantidad
+  const pag_items = items.slice(desde, desde + cantidad)
+  return { items: pag_items, total, pagina, hay_mas: desde + cantidad < total }
+}
+
+router.get('/precios', async function (req, res) {
   try {
-    let product_name = utils.limpiarTexto(req?.query?.product_name)
+    let product_name = utils.limpiarTexto(String(req?.query?.product_name || ''))
 
     if (product_name.length < LIMITE_MIN_CARACTERES)
-      return res.status(200).send({ stat: false, items: [], error: true })
+      return res.status(200).send({ stat: false, items: [], total: 0, error: true,
+                                    message: `El término debe tener al menos ${LIMITE_MIN_CARACTERES} caracteres` })
 
-    if (product_name.search("alquiler") > -1){
-      let res_busqueda = await hacer_busqueda_alquiler( product_name, 'AND' ) 
-      if (res_busqueda){
-        await global.knex('search_query_history')
-                .insert({ 
-                  "query": product_name, 
-                  "date": new Date().toISOString().replace('T', ' ').replace('Z', ''), 
-                  "cant_results": res_busqueda.length,
-                  "ipv4": req.header('x-forwarded-for')
-                })
-                
-        res.status(200).send({ stat: true, items: res_busqueda })
-      }
-    } else {
-      let res_busqueda = await hacer_busqueda( product_name, 'AND' ) 
-      if (res_busqueda){
-        await global.knex('search_query_history')
-                .insert({ 
-                  "query": product_name, 
-                  "date": new Date().toISOString().replace('T', ' ').replace('Z', ''), 
-                  "cant_results": res_busqueda.length,
-                  "ipv4": req.header('x-forwarded-for')
-                })
-                
-        res.status(200).send({ stat: true, items: res_busqueda })
-      }
-    }
-      
-  } catch {
-    res.status(200).send({ stat: false, items: [], error: true })
+    const es_alquiler = product_name.search("alquiler") > -1
+    let res_busqueda = es_alquiler
+      ? await hacer_busqueda_alquiler( product_name, 'AND' )
+      : await hacer_busqueda( product_name, 'AND' )
+    res_busqueda = ordenar(res_busqueda || [], req.query.orden)
+
+    const resultado = paginar(res_busqueda, req.query)
+    if (!es_alquiler) enriquecer(resultado.items)
+
+    // Historial solo en la primera página (no por cada scroll)
+    if (resultado.pagina === 1)
+      registrar_historial(product_name, resultado.total, req)
+
+    res.status(200).send({ stat: true, ...resultado })
+  } catch (error) {
+    console.log('[busqueda/precios] error', error)
+    res.status(200).send({ stat: false, items: [], total: 0, error: true })
   }
-
 })
 
 async function hacer_busqueda_promo( termino, metodo ){
@@ -177,7 +220,7 @@ async function hacer_busqueda_promo( termino, metodo ){
         let promos = undefined
 
         if (termino !== 'cod_todas_las_ofertas'){
-          let PALABRAS = termino.toLowerCase().split(" ")
+          let PALABRAS = termino.toLowerCase().split(" ").filter(p => p.length > 0)
           // comparación insensible a mayúsculas aplicando LOWER sobre la columna
           let SQL = "(LOWER(titulo) LIKE ?) "
           let params = ['%'+PALABRAS[0]+'%']
@@ -186,19 +229,30 @@ async function hacer_busqueda_promo( termino, metodo ){
             params.push('%'+PALABRAS[i]+'%')
           }
 
+          // Sin .distinct('titulo'): knex generaba "select distinct titulo" y se
+          // perdían branch_id/precio/etc. (la búsqueda con término daba siempre 0).
+          // orderBy estable para que la paginación no repita ni saltee ítems.
           promos = await global.knex('promociones_hoy')
                         .select()
-                        .distinct('promociones_hoy.titulo')
                         .whereRaw(SQL, params)
+                        .andWhere('fecha', '>=', inicio_de_ayer())
+                        .orderBy([{ column: 'precio' }, { column: 'id' }])
         } else 
           promos = await global.knex('promociones_hoy')
                       .select()
+                      .where('fecha', '>=', inicio_de_ayer())
+                      .orderBy([{ column: 'precio' }, { column: 'id' }])
 
         
         if (promos){
           let aux = []
           //console.log(propiedades)
           for (let i=0; i < promos.length; i++){
+            // Promo con sucursal desconocida: se saltea en lugar de romper toda la búsqueda
+            const branch = global.branchs_diccio[Number(promos[i].branch_id)]
+            if (!branch) continue
+            let caracteristicas = {}
+            try { caracteristicas = JSON.parse(promos[i].datos_extra) || {} } catch { caracteristicas = {} }
             aux.push(
               {
                 "id": promos[i].id,
@@ -216,11 +270,11 @@ async function hacer_busqueda_promo( termino, metodo ){
                 "time": promos[i].fecha,
                 "empresa": {
                   "id": -1,
-                  "name": global.enterprice_diccio[global.branchs_diccio[promos[i]["branch_id"]].enterprise_id]?.name,
+                  "name": global.enterprice_diccio[Number(branch.enterprise_id)]?.name,
                   "url_website": ""
                 },
-                "locales": global.branch_enterprice_diccio[global.branchs_diccio[promos[i]["branch_id"]].enterprise_id],
-                "caracteristicas": JSON.parse(promos[i].datos_extra),
+                "locales": global.branch_enterprice_diccio[Number(branch.enterprise_id)],
+                "caracteristicas": caracteristicas,
                 "products": {
                   "id": promos[i].id,
                   "name": promos[i].titulo,
@@ -245,28 +299,24 @@ async function hacer_busqueda_promo( termino, metodo ){
 }
 
 router.get('/promociones', async function (req, res) {
-  console.log("query ", req.query)
 
   try {
-    let product_name = req?.query?.product_name
+    const crudo = String(req?.query?.product_name || '').trim()
+    const TODAS = crudo === 'cod_todas_las_ofertas'
+    // Mismo saneo que /precios (acentos, espacios, caracteres especiales)
+    let product_name = TODAS ? crudo : utils.limpiarTexto(crudo)
 
     if (product_name.length < LIMITE_MIN_CARACTERES)
-      return res.status(200).send({ stat: false, items: [], error: true })
+      return res.status(200).send({ stat: false, items: [], total: 0, error: true,
+                                    message: `El término debe tener al menos ${LIMITE_MIN_CARACTERES} caracteres` })
 
-    
-      product_name = nombre_producto_filtrado( product_name)
-      let res_busqueda = await hacer_busqueda_promo( product_name, 'AND' ) 
-      if (res_busqueda){
-        await global.knex('search_query_history')
-                .insert({ 
-                  "query": product_name, 
-                  "date": new Date(), 
-                  "cant_results": res_busqueda.length,
-                  "ipv4": req.header('x-forwarded-for')
-                })
-                
-        res.status(200).send({ stat: true, items: res_busqueda })
-      }
+    if (!TODAS) product_name = nombre_producto_filtrado( product_name)
+    let res_busqueda = ordenar(await hacer_busqueda_promo( product_name, 'AND' ) || [], req.query.orden)
+    const resultado = paginar(res_busqueda, req.query)
+    if (resultado.pagina === 1 && !TODAS)
+      registrar_historial(product_name, resultado.total, req)
+
+    res.status(200).send({ stat: true, ...resultado })
   } catch {
     res.status(200).send({ stat: false, items: [], error: true })
   }  

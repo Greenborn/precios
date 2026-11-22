@@ -171,6 +171,27 @@ async function regenerar_diccionarios(){
   console.log(`  - Categorías: ${Object.keys(global.category_diccio).length}`)
 }
 
+// Quita de buscador y caches los precios con date_time anterior al inicio de ayer
+function purgar_caches_vencidas(){
+  try {
+    let AYER = new Date()
+    AYER.setHours(0,0,0,0)
+    AYER.setDate(AYER.getDate() - 1)
+    const quitados = busqueda_productos.purgar_anteriores(AYER)
+    const lim = AYER.getTime()
+    const vigente = r => { const t = new Date(r.date_time).getTime(); return isNaN(t) || t >= lim }
+    for (const pid in global.precios_diccio) {
+      global.precios_diccio[pid] = global.precios_diccio[pid].filter(vigente)
+      if (global.precios_diccio[pid].length === 0) delete global.precios_diccio[pid]
+    }
+    const by_cat = global.products_category_diccio.by_category_id
+    for (const cid in by_cat) by_cat[cid] = by_cat[cid].filter(vigente)
+    if (quitados.length) console.log(`[purgar_caches] ${quitados.length} precios vencidos quitados del buscador`)
+  } catch (error) {
+    console.log('[purgar_caches] error', error)
+  }
+}
+
 // Recarga en memoria el diccionario alias_busqueda (termino inicial -> termino final)
 async function recargar_alias_busqueda(){
   const cantidad = await alias_busqueda_ctrl.recargar()
@@ -235,6 +256,10 @@ async function base_de_datos_iniciada(){
       }
       ph.product_id = String(ph.product_id)
       ph.branch_id = String(ph.branch_id)
+      // Los precios importados por el servicio Python también deben verse en el
+      // buscador en el momento (antes solo se actualizaban las caches de categorías).
+      if (ph.product_name)
+        busqueda_productos.agregar_a_buscador(ph)
       await sync_cache.actualizar_precio(ph)
       res.status(200).send({ stat: true })
     } catch (error) {
@@ -248,6 +273,10 @@ async function base_de_datos_iniciada(){
 
   // Inicializar diccionarios y estructuras de datos
   await regenerar_diccionarios()
+
+  // Mantener las caches en memoria alineadas con la ventana de price_today (hoy+ayer):
+  // en BD la limpieza la hacen los importadores; acá se replica periódicamente.
+  setInterval(purgar_caches_vencidas, 15 * 60 * 1000)
 
   // La actualización de price_today debe ejecutarse manualmente o encolando la tarea
   // node scripts/recrear_price_today.js o POST /admin/productos/regenerar_price_today (agrega elemento a la cola)

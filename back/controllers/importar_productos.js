@@ -4,8 +4,20 @@ const utils = require("../helpers/utils")
 const busqueda_productos = require("./busqueda_productos")
 const sync_cache = require("./sync_cache")
 
-let precios_actualizados = []
-let nuevos_precios_creados = []
+// Las actualizaciones de buscador/caches en memoria se acumulan en la transacción
+// y se aplican solo si hace commit (evita mostrar precios de un rollback).
+function encolar_sync(trx, precio_hoy) {
+    if (!trx._sync_pendientes) trx._sync_pendientes = []
+    trx._sync_pendientes.push({ ...precio_hoy })
+}
+
+async function aplicar_sync(trx) {
+    for (const ph of (trx._sync_pendientes || [])) {
+        busqueda_productos.agregar_a_buscador(ph)
+        await sync_cache.actualizar_precio(ph)
+    }
+    trx._sync_pendientes = []
+}
 
 async function nuevo_reg_precio( trx, articulo, producto_db, fecha_registro ){
     try {
@@ -75,19 +87,8 @@ async function nuevo_reg_precio( trx, articulo, producto_db, fecha_registro ){
         }
 
         if (insert_1 && result) {
-            nuevos_precios_creados.push(insert);
-            // Actualizar estructura de búsqueda en tiempo real
-            busqueda_productos.agregar_a_buscador({
-                product_name: articulo.name,
-                product_id: producto_db.id,
-                price: articulo.price,
-                branch_id: articulo.branch_id,
-                date_time: insert.date_time,
-                time: insert.time,
-                url: insert.url
-            });
-            // Actualizar caches de precios y productos por categoría
-            await sync_cache.actualizar_precio(precio_hoy);
+            // Buscador y caches se actualizan recién después del commit
+            encolar_sync(trx, precio_hoy);
             return insert;
         } else {
             return false;
@@ -215,7 +216,6 @@ async function procesa_precio( trx, producto_db, articulo, fecha_registro ){
                 let nuevo_precio = await nuevo_reg_precio( trx, articulo, producto_db, fecha_registro )
                 if (nuevo_precio){
                     await procesar_variacion(trx, [ ultimo_precio, articulo ], fecha_registro)
-                    precios_actualizados.push( [ ultimo_precio, articulo ] )
                     return resolve(true)
                 } else 
                     return resolve(false)
@@ -224,32 +224,33 @@ async function procesa_precio( trx, producto_db, articulo, fecha_registro ){
                     "date_time": new Date(), "time": new Date(), "url": ( articulo.url ) ? articulo.url : null
                 } ).where("id", ultimo_precio.id)
                 
+                // Upsert por (product_id, branch_id) refrescando la fecha: el precio
+                // se confirmó hoy. Antes, si ya existía por price_id no se refrescaba
+                // date_time (la limpieza hoy+ayer lo borraba) y si había otro registro
+                // de la misma sucursal se insertaba un duplicado.
+                const AHORA = new Date()
                 let precio_hoy = {
-                    ...ultimo_precio,
-                    "date_time": new Date(), "time": new Date(), "url": ( articulo.url ) ? articulo.url : null
+                    "product_id":    producto_db.id,
+                    "price":         ultimo_precio.price,
+                    "date_time":     AHORA,
+                    "time":          AHORA,
+                    "branch_id":     articulo.branch_id,
+                    "es_oferta":     0,
+                    "confiabilidad": 100,
+                    "url":           ( articulo.url ) ? articulo.url : null,
+                    "product_name":  articulo.name,
+                    "price_id":      ultimo_precio.id
                 }
-                precio_hoy['id']           = uuid.v7()
-                precio_hoy['product_name'] = articulo.name
-                precio_hoy['price_id']     = ultimo_precio.id
-                let repetido = await global.knex('price_today').where({
-                    'price_id': ultimo_precio.id,
-                }).first()
-                if (!repetido) {
+                let existente = await trx('price_today')
+                    .where({ product_id: producto_db.id, branch_id: articulo.branch_id }).first()
+                if (existente) {
+                    precio_hoy['id'] = existente.id
+                    await trx('price_today').where({ id: existente.id }).update( precio_hoy )
+                } else {
+                    precio_hoy['id'] = uuid.v7()
                     await trx('price_today').insert( precio_hoy )
-                    
-                    // Actualizar estructura de búsqueda (mismo precio, solo actualiza timestamp)
-                    busqueda_productos.agregar_a_buscador({
-                        product_name: articulo.name,
-                        product_id: producto_db.id,
-                        price: ultimo_precio.price,
-                        branch_id: articulo.branch_id,
-                        date_time: new Date(),
-                        time: new Date(),
-                        url: articulo.url
-                    });
-                    // Actualizar caches de precios y productos por categoría
-                    await sync_cache.actualizar_precio(precio_hoy);
                 }
+                encolar_sync(trx, precio_hoy)
                 return resolve(true)
             } else  if (!ultimo_precio) {
                 let nuevo_precio = await nuevo_reg_precio( trx, articulo, producto_db, fecha_registro )
@@ -331,6 +332,7 @@ async function procesar_articulo(articulo, fecha_registro ){
 
                 if (proc_precio_){
                     await trx.commit()
+                    await aplicar_sync(trx)
                     resolve(res)
                     return
                 } else {

@@ -1,16 +1,19 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="alias_productos"
-    :api="vteApi"
-    :config="vteConfig"
-    @rowSelected="onRowSelected"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  <AbmShell subtitle="Nombres alternativos con los que se reconocen los productos.">
+    <VteTableEditor
+      ref="table_ref"
+      id="alias_productos"
+      :api="vteApi"
+      :config="vteConfig"
+      @rowSelected="onRowSelected"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed } from 'vue'
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { get_all, get_productos, add_one, put_one, delete_one } from '@/api/admin/aliasProductos'
   import { AppStore } from '@/stores/app'

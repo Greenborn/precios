@@ -1,105 +1,81 @@
 <template>
     <PublicTopBar />
 
-    <div class="container-fluid" id="estadisticas-cnt">
+    <main class="pub-main" id="estadisticas-cnt">
+      <div class="pub-container">
+        <PageHeader title="Estadísticas" icon="bi-bar-chart-line"
+                    subtitle="Variación de precios diaria: diferencia entre los dos últimos precios registrados de cada producto."
+                    :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Estadísticas' }]" />
 
-        <div class="row align-items-center justify-content-center">
-            <div class="col-12 col-md-10 col-lg-8 ">
-
-                <div class="accordion" id="acordionEstadisticas">
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3" aria-expanded="true" aria-controls="collapse3">
-                                Variación de precios diaria, ordenados por porcentaje de variación de mayor a menor - 
-                                Hay que tener en cuenta que algunas variaciones exageradas pueden deberse a artículos que antes estaban en promoción y ahora no lo están
-                            </button>
-                        </h2>
-                        <div id="collapse3" class="accordion-collapse collapse show" data-bs-parent="#acordionEstadisticas">
-                            <div class="accordion-body">
-                                <p> Para calcular el procentaje de variación se toma la diferencia entre los últimos dos precios registrados y se divide por el precio anterior/100</p>
-                                <p> La media del porcentaje de todos los elementos es: <b>{{ media_porcentaje_aumento }}%</b></p>
-                                <p> Calculado el: {{ fechaDateToString(new Date(mayor_aumento_diario[0]?.fecha_utlimo_precio), '/') }}</p>
-                                <ul class="list-group">
-                                    <li class="list-group-item"  v-for="(item) in mayor_aumento_diario" :key="item">
-                                        <div class="row">
-
-                                            <div class="col">
-                                                <b>%{{ item.porcentaje_aumento }}</b> - 
-                                                {{item.nombre_producto}} - 
-                                                <b> ayer valía: ${{ item.precio_ayer }} y hoy vale ${{ item.precio_hoy }}</b> -
-                                                en comercio <b>{{ item.nombre_comercio }}</b>
-                                            </div>
-                                            <div class="col-auto">
-                                                <button type="button" class="btn btn-primary" @click="mostrar_estadisticas(item)">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-graph-up" viewBox="0 0 16 16">
-                                                        <path fill-rule="evenodd" d="M0 0h1v15h15v1H0zm14.817 3.113a.5.5 0 0 1 .07.704l-4.5 5.5a.5.5 0 0 1-.74.037L7.06 6.767l-3.656 5.027a.5.5 0 0 1-.808-.588l4-5.5a.5.5 0 0 1 .758-.06l2.609 2.61 4.15-5.073a.5.5 0 0 1 .704-.07"/>
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                            
-                                        </div>                                        
-                                    </li>
-                                </ul>
-
-                            </div>
-                        </div>
-                    </div>
-<!--
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-                                Términos de Búsqueda más Consultados <small>(Calculadas en la última actualización de precios)</small>
-                            </button>
-                        </h2>
-                        <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#acordionEstadisticas">
-                            <div class="accordion-body">
-                                <p>
-                                    Más búscados de la semana
-                                </p>
-                                <ul class="list-group">
-                                    <li v-for="(item) in mas_buscados" :key="item" class="list-group-item">
-                                        <b>{{ item.termino }}</b>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2" aria-expanded="true" aria-controls="collapse2">
-                                Cantidad de precios por negocio
-                            </button>
-                        </h2>
-                        <div id="collapse2" class="accordion-collapse collapse show" data-bs-parent="#acordionEstadisticas">
-                            <div class="accordion-body">
-                                <p>
-                                    Aquí se muestra el total de precios histórico registrado por cada comercio.
-                                    Cada vez que se agrega un nuevo producto o el precio del mismo varía se suma 1.
-                                    Se muestran aquellos que al menos tienen un precio registrado.
-                                </p>
-                                <ul class="list-group">
-                                    <li v-for="(item) in precios_por_negocio" :key="item" class="list-group-item">
-                                        <b>{{ item.nombre }}: </b>{{ item.cantidad }}
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    -->
-                </div>
-
-            </div>
+        <div class="pub-grid pub-grid--stats mb-4">
+            <StatCard label="Productos analizados" icon="bi-box-seam" :loading="cargando"
+                      :value="mayor_aumento_diario.length.toLocaleString('es-AR')" />
+            <StatCard label="Variación mediana" icon="bi-percent" tone="warning" :loading="cargando"
+                      :value="media_porcentaje_aumento !== undefined ? media_porcentaje_aumento + '%' : '—'" />
+            <StatCard label="Subieron" icon="bi-arrow-up-right" tone="danger" :loading="cargando"
+                      :value="resumen.subieron.toLocaleString('es-AR')" />
+            <StatCard label="Bajaron" icon="bi-arrow-down-right" tone="success" :loading="cargando"
+                      :value="resumen.bajaron.toLocaleString('es-AR')" />
         </div>
 
-    </div>
+        <Card title="Mayores variaciones" icon="bi-graph-up-arrow" class="mb-4"
+              :subtitle="mayor_aumento_diario[0]?.fecha_utlimo_precio ? 'Calculado el ' + fechaDateToString(new Date(mayor_aumento_diario[0]?.fecha_utlimo_precio), '/') : ''">
+            <Skeleton v-if="cargando" height="300px" shape="rect" />
+            <EmptyState v-else-if="!itemsFiltrados.length" size="sm" title="Sin datos para graficar" />
+            <Chart v-else type="bar" :data="chartData" :options="chartOptions" height="320px" />
+        </Card>
+
+        <Card flush>
+            <template #header>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
+                    <h2 class="fs-6 mb-0">Detalle por producto</h2>
+                    <div class="pub-chips" role="group" aria-label="Filtrar variaciones">
+                        <button v-for="f in FILTROS" :key="f.id" type="button" class="pub-chip"
+                                :aria-pressed="filtro == f.id ? 'true' : 'false'" @click="filtro = f.id; limite = 50">{{ f.label }}</button>
+                    </div>
+                </div>
+            </template>
+            <div class="px-3 pt-3 small gb-text-muted">
+                Algunas variaciones exageradas pueden deberse a artículos que antes estaban en promoción y ahora no.
+                El porcentaje se calcula como (precio hoy − precio anterior) / precio anterior × 100.
+            </div>
+            <div v-if="cargando" class="p-3"><Skeleton :lines="6" /></div>
+            <EmptyState v-else-if="!itemsFiltrados.length" size="sm" title="No hay productos en este filtro" />
+            <ul v-else class="list-unstyled mb-0 est-list">
+                <li v-for="(item, k) in itemsFiltrados.slice(0, limite)" :key="k" class="est-item">
+                    <VariacionPrecio :value="item.porcentaje_aumento" class="est-item__delta" />
+                    <div class="est-item__body">
+                        <div class="fw-semibold">{{ item.nombre_producto }}</div>
+                        <small class="gb-text-muted"><Icon name="bi-shop" /> {{ item.nombre_comercio }}</small>
+                    </div>
+                    <div class="est-item__prices gb-num">
+                        <small class="gb-text-muted text-decoration-line-through">${{ item.precio_ayer }}</small>
+                        <b>${{ item.precio_hoy }}</b>
+                    </div>
+                    <Button size="sm" variant="ghost" icon="bi-graph-up" :ariaLabel="'Ver evolución de ' + item.nombre_producto"
+                            @click="mostrar_estadisticas(item)" />
+                </li>
+            </ul>
+            <template #footer v-if="itemsFiltrados.length > limite">
+                <button type="button" class="btn btn-link btn-sm w-100 text-decoration-none" @click="limite += 100">
+                    Mostrar más ({{ itemsFiltrados.length - limite }} restantes)
+                </button>
+            </template>
+        </Card>
+      </div>
+    </main>
+    <PublicFooter />
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { AppStore } from "../stores/app"
 import { get_estadistica } from '../api/public/publicEndpoints'
 import PublicTopBar from "../components/publico/PublicTopBar.vue";
+import PublicFooter from "../components/publico/PublicFooter.vue";
+import VariacionPrecio from "../components/publico/VariacionPrecio.vue";
+import { CHART_COLORS } from '../utils/chartTheme'
+
 import GraficoEvolucionPrecio from '../components/publico/GraficoEvolucionPrecio.vue'
 import { formatMoney, fechaDateToString } from '../helpers/formatter'
 
@@ -110,6 +86,48 @@ const precios_por_negocio = ref([])
 const mas_buscados = ref([])
 const mayor_aumento_diario = ref([])
 const media_porcentaje_aumento = ref(undefined)
+
+// ---- UI ----
+const cargando = ref(true)
+const filtro = ref('todos')
+const limite = ref(50)
+const FILTROS = [
+    { id: 'todos', label: 'Todos' },
+    { id: 'subieron', label: 'Subieron' },
+    { id: 'bajaron', label: 'Bajaron' }
+]
+const resumen = computed(() => {
+    let subieron = 0, bajaron = 0
+    for (const it of mayor_aumento_diario.value){
+        const n = Number(it.porcentaje_aumento)
+        if (n > 0) subieron++
+        else if (n < 0) bajaron++
+    }
+    return { subieron, bajaron }
+})
+const itemsFiltrados = computed(() => {
+    if (filtro.value == 'subieron') return mayor_aumento_diario.value.filter(i => Number(i.porcentaje_aumento) > 0)
+    if (filtro.value == 'bajaron') return [...mayor_aumento_diario.value].filter(i => Number(i.porcentaje_aumento) < 0)
+        .sort((a, b) => Number(a.porcentaje_aumento) - Number(b.porcentaje_aumento))
+    return mayor_aumento_diario.value
+})
+const chartData = computed(() => {
+    const top = itemsFiltrados.value.slice(0, 10)
+    return {
+        labels: top.map(i => String(i.nombre_producto || '').slice(0, 28)),
+        datasets: [{
+            label: 'Variación %',
+            data: top.map(i => Number(i.porcentaje_aumento)),
+            backgroundColor: top.map(i => Number(i.porcentaje_aumento) >= 0 ? CHART_COLORS.danger : CHART_COLORS.primary),
+            borderRadius: 6
+        }]
+    }
+})
+const chartOptions = {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: { x: { ticks: { callback: v => v + '%' } } }
+}
 
 async function mostrar_estadisticas( item ){
     storeApp.loading = true
@@ -136,6 +154,7 @@ onMounted(async ()=>{
     if (res){
         storeApp.loading = false
         if (!res.stat){
+            cargando.value = false
             storeApp.mostrar_alerta( "Ocurrió un error al cargar las estadísticas de precios por negocio" )
             return false
         }
@@ -148,6 +167,7 @@ onMounted(async ()=>{
     if (res2){
         storeApp.loading = false
         if (!res2.stat){
+            cargando.value = false
             storeApp.mostrar_alerta( "Ocurrió un error al cargar las estadísticas de más buscados" )
             return false
         }
@@ -161,6 +181,7 @@ onMounted(async ()=>{
     if (res3){
         storeApp.loading = false
         if (!res3.stat){
+            cargando.value = false
             storeApp.mostrar_alerta( "Ocurrió un error al cargar las estadísticas de los que más aumentaron" )
             return false
         }
@@ -171,16 +192,18 @@ onMounted(async ()=>{
         }
     } else
         storeApp.loading = false
+    cargando.value = false
 })
 </script>
 
 <style scoped>
-#estadisticas-cnt{
-    margin-top: 5rem;
-}
-
-#collapse3 .accordion-body{
-    max-height: 100vh; 
-    overflow-y: scroll;
+.est-list { max-height: 70vh; overflow-y: auto; margin-top: var(--gb-space-3); }
+.est-item { display: flex; align-items: center; gap: var(--gb-space-3); padding: .75rem var(--gb-space-4); border-top: 1px solid var(--gb-border); }
+.est-item__delta { min-width: 5rem; justify-content: center; }
+.est-item__body { flex: 1; min-width: 0; }
+.est-item__prices { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+@media (max-width: 575.98px) {
+  .est-item { flex-wrap: wrap; }
+  .est-item__body { flex-basis: calc(100% - 6rem); }
 }
 </style>

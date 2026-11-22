@@ -1,44 +1,38 @@
 <template>
 <PublicTopBar />
-    
-<div class="container-fluid" id="novedades-cnt">
-    <div class="row align-items-center justify-content-center">
-        <div class="col-12 col-md-10 col-lg-8 ">
-            <div class="card rounded-0 mb-1 p-0">
 
-                <div class="card-header p-4 pb-0">
-                    <h4>Novedades</h4>
-                </div>
+<main class="pub-main" id="novedades-cnt">
+  <div class="pub-container pub-container--narrow">
+    <PageHeader title="Novedades" icon="bi-megaphone" subtitle="Cambios y anuncios del sitio."
+                :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Novedades' }]" />
 
-                <div class="card-body p-4">
-                    <template v-if="novedades.length != 0">
-                        <div class="alert alert-info" v-for="novedad in novedades" :key="novedad">
-                            <div class="row">
+    <EmptyState v-if="novedades.length == 0" icon="bi-megaphone" title="Sin novedades por ahora"
+                description="Cuando haya anuncios los vas a ver acá." />
 
-                                <div class="col-12 col-md-6 col-lg-auto">
-                                    <b>{{ novedad.datetime }}:</b>
-                                </div>
-
-                                <div class="col-12 col-md-6 col-lg-auto">
-                                    {{ novedad.text }}
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
+    <ol v-else class="list-unstyled d-grid gap-3 mb-0">
+      <li v-for="(novedad, i) in novedades" :key="i">
+        <Card>
+          <div class="d-flex gap-3">
+            <span class="pub-quick__icon flex-none" aria-hidden="true"><Icon name="bi-bell" /></span>
+            <div>
+              <p class="small gb-text-muted mb-1 gb-num">{{ novedad.datetime }}</p>
+              <p class="mb-0">{{ novedad.text }}</p>
             </div>
-
-        </div>
-    </div>
-</div>
-    
+          </div>
+        </Card>
+      </li>
+    </ol>
+  </div>
+</main>
+<PublicFooter />
 </template>
-  
+
 <script setup>
     import { ref, onMounted } from 'vue'
     import { public_news } from '../api/public/publicEndpoints'
     import { AppStore } from "../stores/app"
     import PublicTopBar from '../components/publico/PublicTopBar.vue';
+    import PublicFooter from '../components/publico/PublicFooter.vue';
 
     const storeApp = AppStore()
   
@@ -59,9 +53,3 @@
     })
 </script>
   
-<style scoped>
-  
-#novedades-cnt{
-    margin-top: 5rem;
-}
-</style>

@@ -1,17 +1,19 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="rutas"
-    :api="vteApi"
-    :config="vteConfig"
-    @loaded="abm_listo = true"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
-
+  <AbmShell subtitle="Rutas del panel, menú y componentes asociados.">
+    <VteTableEditor
+      ref="table_ref"
+      id="rutas"
+      :api="vteApi"
+      :config="vteConfig"
+      @loaded="abm_listo = true"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed, onMounted } from 'vue';
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { getAllRutas, crearRuta, borrarRuta, editarRuta } from '@/api/admin/gestionRBAC'
   import { AppStore } from '@/stores/app'

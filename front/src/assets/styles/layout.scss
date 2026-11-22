@@ -1,4 +1,9 @@
-@use "./_overrides" as *;
+@use "./tokens" as *;
+@use "./public";
+@use "./theme";
+@use "./utilities";
+@use "./overrides";
+@use "./admin";
 
 html {
   font-size: 1rem;
@@ -10,9 +15,13 @@ html, body, #app {
 }
 
 body {
-  font-family: 'Open Sans', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #f8f9fa;
+  font-family: var(--gb-font-sans);
+  background-color: var(--gb-bg);
+  color: var(--gb-text);
+  -webkit-font-smoothing: antialiased;
 }
+
+h1, h2, h3, h4, h5, h6 { letter-spacing: -0.01em; color: var(--gb-heading); }
 
 #app {
   width: 100%;
@@ -33,15 +42,15 @@ body.cls-public #app {
   width: 100vw;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 20% 20%, rgba(25, 135, 84, 0.12), transparent 45%),
-    linear-gradient(160deg, #212529 0%, #1a1e21 100%);
-  color: #374151;
+    radial-gradient(circle at 20% 20%, rgba($gb-primary, 0.14), transparent 45%),
+    linear-gradient(160deg, $gb-slate-900 0%, $gb-login-bg-end 100%);
+  color: $gb-slate-700;
 
   .form-cont{
-    background: #fff;
+    background: var(--gb-surface);
     border: none;
-    border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    border-radius: var(--gb-radius-lg);
+    box-shadow: $gb-shadow-lg;
     padding: 3rem 2.5rem;
     height: fit-content;
     margin-block: auto;
@@ -54,24 +63,32 @@ body.cls-public #app {
 }
 
 /* ---------- Panel admin ---------- */
-.nav-item {
-  a {
-    color: #cfcfcf;
-    font-weight: bold;
-  }
-
-  .active{
-    color: #fff;
-    font-weight: bolder;
-  }
-}
-
+/* NOTA: .bg-primary se fuerza a oscuro por compatibilidad con la navbar
+   admin existente. Para fondo verde de marca usar .text-bg-primary o
+   var(--gb-primary). */
 .bg-primary {
-  background-color: #212529 !important;
+  background-color: var(--gb-sidebar-bg) !important;
 }
 
 /* ---------- Tablas: nunca exceden la pantalla ---------- */
-.app-content > .te-wrapper {
+.app-content > .te-wrapper,
+.app-content > .gb-route-view > .te-wrapper {
   height: 100%;
   min-height: 0;
+}
+
+/* ---------- Transiciones entre rutas ---------- */
+.gb-route-view--admin { height: 100%; min-height: 0; }
+
+.gb-route-enter-active,
+.gb-route-leave-active {
+  transition: opacity 160ms var(--gb-ease, ease), transform 160ms var(--gb-ease, ease);
+}
+.gb-route-enter-from { opacity: 0; transform: translateY(4px); }
+.gb-route-leave-to   { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-route-enter-active,
+  .gb-route-leave-active { transition: none; }
+  .gb-route-enter-from { transform: none; }
 }

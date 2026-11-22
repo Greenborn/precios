@@ -1,16 +1,19 @@
 <template>
-  <VteTableEditor
-    ref="table_ref"
-    id="indices_precios"
-    :api="vteApi"
-    :config="vteConfig"
-    @rowSelected="onRowSelected"
-    @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  <AbmShell subtitle="Índices de precios y su vínculo con alias de categorías.">
+    <VteTableEditor
+      ref="table_ref"
+      id="indices_precios"
+      :api="vteApi"
+      :config="vteConfig"
+      @rowSelected="onRowSelected"
+      @rowDoubleClick="crud.editarFila"></VteTableEditor>
+  </AbmShell>
 </template>
 
 <script setup>
+  import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, computed } from 'vue'
-  import { TableEditor as VteTableEditor } from 'vue-table-editor'
+  import { TableEditor as VteTableEditor } from '@greenborn/vue-table-editor'
   import { buildVteList, buildCrud, toVteElementName } from '@/helpers/tableEditorVue'
   import { get_all, alias_categoria_disponibles, add_one, put_one, delete_one } from '@/api/admin/indicesPrecios'
   import { AppStore } from '@/stores/app'
