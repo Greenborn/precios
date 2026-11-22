@@ -7,12 +7,13 @@
                 :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Uso de datos' }]" />
 
     <Card>
-      <p>Los precios que se muestran en Precios de Tandil provienen de dos fuentes: canales públicos de comercios y aportes de la comunidad.</p>
+      <p>Los precios que se muestran en Precios de Tandil provienen de tres fuentes: canales públicos de comercios, precios cargados por los propios comercios y aportes de la comunidad.</p>
 
       <h2 class="h5 mt-4">Origen de la información</h2>
       <ul>
         <li><strong>Canales públicos:</strong> precios publicados por comercios en medios abiertos, procesados de forma automatizada.</li>
-        <li><strong>Aportes de usuarios:</strong> precios cargados voluntariamente desde la sección "Carga de precios".</li>
+        <li><strong>Comercios con Perfil Comercial:</strong> precios que los propios comercios cargan desde su Perfil Comercial, ingresando con Google. Estos precios se publican de inmediato, sin una revisión previa, y se mantienen vigentes hasta que el comercio carga uno nuevo para ese producto y local.</li>
+        <li><strong>Aportes de usuarios:</strong> precios cargados voluntariamente desde la sección "Carga comunitaria".</li>
       </ul>
 
       <h2 class="h5 mt-4">Qué significa para vos</h2>

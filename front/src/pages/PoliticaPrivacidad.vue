@@ -11,7 +11,9 @@
 
       <h2 class="h5 mt-4">Datos que recolectamos</h2>
       <ul>
-        <li><strong>Cuenta de administrador:</strong> nombre, correo electrónico y credenciales de acceso, sólo para quienes administran el sitio.</li>
+        <li><strong>Cuenta de usuario:</strong> cualquier titular de un negocio puede registrarse con su cuenta de Google. Quienes administran el sitio también tienen una cuenta, con credenciales de acceso.</li>
+        <li><strong>Ingreso con Google:</strong> al ingresar mediante Google (a través de nuestro servicio de inicio de sesión único) recibimos y guardamos tu nombre, tu apellido y tu correo electrónico. No accedemos a tu contraseña de Google; en nuestro sistema la cuenta queda con una contraseña propia aleatoria que no se usa para ingresar.</li>
+        <li><strong>Perfil comercial:</strong> el nombre del negocio, sus locales con su ubicación en el mapa y los precios que cargues. Esta información es pública y se muestra en el sitio.</li>
         <li><strong>Carga de precios:</strong> los precios, productos y comercios que cargan los usuarios. No se asocian a datos personales del cargador salvo que la carga lo requiera.</li>
         <li><strong>Datos técnicos:</strong> dirección IP, tipo de navegador y registros de uso necesarios para la seguridad y el funcionamiento del servicio.</li>
       </ul>
@@ -20,7 +22,7 @@
       <p>Usamos los datos para operar el buscador de precios, gestionar las cargas comunitarias, mantener la seguridad del sistema y responder consultas.</p>
 
       <h2 class="h5 mt-4">Compartición</h2>
-      <p>No vendemos datos personales. Podemos compartirlos con proveedores de infraestructura que sólo los procesan para prestar el servicio, o cuando una norma legal lo exija.</p>
+      <p>No vendemos datos personales. Utilizamos a Google como proveedor de autenticación para el ingreso con tu cuenta de Google, por lo que ese proceso se rige además por la política de privacidad de Google. Podemos compartirlos con proveedores de infraestructura que sólo los procesan para prestar el servicio, o cuando una norma legal lo exija.</p>
 
       <h2 class="h5 mt-4">Tus derechos</h2>
       <p>Podés solicitar acceso, rectificación o eliminación de tus datos personales escribiendo a nuestro perfil oficial de Facebook: <a href="https://www.facebook.com/TandilPreciosBaratos" target="_blank" rel="noopener">TandilPreciosBaratos</a>.</p>
