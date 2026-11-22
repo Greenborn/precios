@@ -1,6 +1,7 @@
 require("dotenv").config({ path: '.env' })
 const busqueda_productos = require("./controllers/busqueda_productos")
 const sync_cache = require("./controllers/sync_cache")
+const precios_negocio = require("./controllers/precios_negocio")
 const alias_busqueda_ctrl = require("./controllers/alias_busqueda")
 const { spawn } = require('child_process')
 const path = require('path')
@@ -112,6 +113,9 @@ async function regenerar_diccionarios(){
                               .join('products', 'products.id', 'alias_productos.product_id')
   let productos_todos = await global.knex('products').select()
   let precios_hoy = await global.knex('price_today').select()
+  // Precios de negocios: siempre vigentes (sin ventana), reemplazan a price_today
+  await precios_negocio.cargar_ids(global.knex)
+  precios_hoy = await precios_negocio.combinar(global.knex, precios_hoy)
   let product_category = await global.knex('product_category').select()
 
   console.log('[regenerar_diccionarios] Generando diccionario de precios...')
@@ -179,7 +183,8 @@ function purgar_caches_vencidas(){
     AYER.setDate(AYER.getDate() - 1)
     const quitados = busqueda_productos.purgar_anteriores(AYER)
     const lim = AYER.getTime()
-    const vigente = r => { const t = new Date(r.date_time).getTime(); return isNaN(t) || t >= lim }
+    // Los precios de negocios (r.negocio) no se purgan por antigüedad
+    const vigente = r => r.negocio === true || (() => { const t = new Date(r.date_time).getTime(); return isNaN(t) || t >= lim })()
     for (const pid in global.precios_diccio) {
       global.precios_diccio[pid] = global.precios_diccio[pid].filter(vigente)
       if (global.precios_diccio[pid].length === 0) delete global.precios_diccio[pid]

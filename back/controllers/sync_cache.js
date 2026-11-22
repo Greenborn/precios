@@ -1,3 +1,5 @@
+const precios_negocio = require('./precios_negocio')
+
 // Sincroniza las caches en memoria (precios_diccio y products_category_diccio)
 // cada vez que se actualiza un precio, sin esperar a regenerar_diccionarios.
 
@@ -18,7 +20,8 @@ function normalizar_item(ph) {
         price_id: ph.price_id,
         user_id: ph.user_id || null,
         user_nombre: ph.user_nombre || null,
-        user_apellido: ph.user_apellido || null
+        user_apellido: ph.user_apellido || null,
+        negocio: !!(ph.negocio || precios_negocio.es_negocio(ph.branch_id))
     }
 }
 

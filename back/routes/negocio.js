@@ -148,4 +148,105 @@ router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion, as
   }
 })
 
+// ---------- Ficha pública del negocio (sin login) ----------
+//   GET /api/negocio/publico/:perfilId/locales                -> locales publicados del negocio
+//   GET /api/negocio/publico/:perfilId/productos?limit&offset -> último precio por producto y local
+// :perfilId es perfiles.id (la misma clave que /api/perfil/publico/:id).
+// Solo datos públicos: nunca user_id, user_nombre, user_apellido ni emails.
+const precios_negocio = require('../controllers/precios_negocio')
+const LIMITE_PRODUCTOS_DEFAULT = 50
+const LIMITE_PRODUCTOS_MAX = 200
+
+// Resuelve el perfil público al usuario dueño; null si no existe
+async function dueno_de_perfil(req, res) {
+  const perfilId = Number(req.params.perfilId)
+  if (!Number.isInteger(perfilId) || perfilId <= 0) {
+    res.status(400).json({ error: 'Identificador de negocio inválido' })
+    return null
+  }
+  const perfil = await knex('perfiles').where({ id: perfilId }).first('usuario_id')
+  if (!perfil) {
+    res.status(404).json({ error: 'negocio no encontrado' })
+    return null
+  }
+  return perfil.usuario_id
+}
+
+// Locales publicados del dueño: { id, nombre, calle, ciudad, latitud, longitud }
+async function locales_publicos(usuarioId) {
+  const filas = await knex('branch')
+    .where({ propietario_id: usuarioId, publicado: true })
+    .orderBy('id')
+    .select('id', 'branch_name', 'address', 'city', 'latitude', 'longitude')
+  return filas.map((f) => ({
+    id: Number(f.id),
+    nombre: f.branch_name || null,
+    calle: f.address || null,
+    ciudad: f.city || null,
+    latitud: f.latitude == null ? null : Number(f.latitude),
+    longitud: f.longitude == null ? null : Number(f.longitude),
+  }))
+}
+
+router.get('/negocio/publico/:perfilId/locales', async (req, res) => {
+  try {
+    const usuarioId = await dueno_de_perfil(req, res)
+    if (usuarioId == null) return
+    res.json(await locales_publicos(usuarioId))
+  } catch (err) {
+    console.error('[negocio] GET publico locales', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+router.get('/negocio/publico/:perfilId/productos', async (req, res) => {
+  try {
+    const usuarioId = await dueno_de_perfil(req, res)
+    if (usuarioId == null) return
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || LIMITE_PRODUCTOS_DEFAULT, 1), LIMITE_PRODUCTOS_MAX)
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
+
+    const locales = await locales_publicos(usuarioId)
+    const nombres = new Map(locales.map((l) => [String(l.id), l.nombre]))
+    const branchIds = locales.map((l) => l.id)
+    if (!branchIds.length) return res.json({ total: 0, limit, offset, items: [] })
+
+    const base = precios_negocio.consulta_ultimos_precios(knex, branchIds)
+    const [{ n: total }] = await knex.count('* as n').from(base.clone().as('t'))
+    const filas = await base.clone()
+      .orderBy('products.name')
+      .orderBy('price.branch_id')
+      .limit(limit)
+      .offset(offset)
+
+    // Foto del artículo por (local, artículo), solo de las filas de esta página
+    const productIds = [...new Set(filas.map((f) => f.product_id))]
+    const fotos = productIds.length
+      ? await knex('articulo_fotos').whereIn('branch_id', branchIds).whereIn('product_id', productIds).select('branch_id', 'product_id', 'archivo')
+      : []
+    const fotoPor = new Map(fotos.map((f) => [`${f.branch_id}|${f.product_id}`, `${cfg.FOTOS_URL}/${f.archivo}`]))
+
+    res.json({
+      total: Number(total),
+      limit,
+      offset,
+      items: filas.map((f) => ({
+        producto_id: f.product_id,
+        producto: f.product_name,
+        precio: Number(f.price),
+        fecha: f.date_time,
+        hora: f.time,
+        es_oferta: !!f.es_oferta,
+        local_id: Number(f.branch_id),
+        local: nombres.get(String(f.branch_id)) || null,
+        foto_url: fotoPor.get(`${f.branch_id}|${f.product_id}`) || null,
+      })),
+    })
+  } catch (err) {
+    console.error('[negocio] GET publico productos', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 module.exports = router

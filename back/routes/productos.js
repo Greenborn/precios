@@ -202,7 +202,8 @@ async function registrar_precio_usuario(usuario, product_id, branch_id, price, f
         await trx('price').insert( insert )
 
         // Limpiar price_today (misma ventana hoy+ayer)
-        await trx('price_today').where('date_time', '<', AYER).del()
+        await trx('price_today').where('date_time', '<', AYER)
+            .whereNotIn('branch_id', trx('branch').select('id').whereNotNull('propietario_id')).del()
 
         // Obtener el nombre del producto para price_today
         const producto_db = await trx('products').where('id', product_id).first()

@@ -3,6 +3,7 @@
 //   negocio del local -> enterprice (cada local nuevo crea su enterprice con el mismo nombre)
 // Además: código identificador único por local nuevo y control de duplicados.
 const crypto = require('crypto')
+const precios_negocio = require('../controllers/precios_negocio')
 
 // Sin caracteres ambiguos (0/O, 1/I)
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -83,6 +84,7 @@ function createLocalesRepoBranch(knex) {
         })
         return Number(id)
       })
+      precios_negocio.marcar(nuevoId, true)
       return aPaquete(await base().where({ id: nuevoId }).first())
     },
     async actualizar(id, cambios) {
@@ -104,6 +106,7 @@ function createLocalesRepoBranch(knex) {
         if (!fila) return false
         await trx('articulo_fotos').where({ branch_id: id }).del()
         await trx('branch').where({ id }).del()
+        precios_negocio.marcar(id, false)
         // Si el comercio ya no tiene locales, se quita junto con el local
         const quedan = await trx('branch').where({ enterprise_id: fila.enterprise_id }).first()
         if (!quedan && fila.enterprise_id) {

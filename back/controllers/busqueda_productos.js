@@ -23,6 +23,8 @@ function obtener_propiedades(name) {
     return letras
 }
 
+const precios_negocio = require('./precios_negocio')
+
 exports.inicializa_buscador = async function() {
 
     console.log('Generando estructura de busqueda')
@@ -32,10 +34,13 @@ exports.inicializa_buscador = async function() {
     const nuevo_indice = {}
 
     // Usar price_today para inicializar el buscador
-    const productosHoy = await global.knex('price_today').select()
+    const filasHoy = await global.knex('price_today').select()
         .orderBy('date_time', 'desc')
         .orderBy('price', 'asc')
         .where('price', '<>', 0)
+    // Precios de negocios incluidos siempre (ver controllers/precios_negocio.js)
+    const productosHoy = (await precios_negocio.combinar(global.knex, filasHoy))
+        .filter(r => Number(r.price) !== 0)
     for (let i = 0; i < productosHoy.length; i++) {
         const nombre = productosHoy[i].product_name
         if (!nombre) continue
@@ -54,6 +59,7 @@ exports.inicializa_buscador = async function() {
             'user_id':        productosHoy[i].user_id || null,
             'user_nombre':    productosHoy[i].user_nombre || null,
             'user_apellido':  productosHoy[i].user_apellido || null,
+            'negocio':        !!productosHoy[i].negocio,
         }
         let o_k = Object.keys(props)
         for (let j = 0; j < o_k.length; j++) {
@@ -126,6 +132,7 @@ exports.agregar_a_buscador = function(producto) {
         'user_id':        producto.user_id || null,
         'user_nombre':    producto.user_nombre || null,
         'user_apellido':  producto.user_apellido || null,
+        'negocio':        !!(producto.negocio || precios_negocio.es_negocio(producto.branch_id)),
     }
 
     // Agregar a cada letra correspondiente
@@ -153,7 +160,8 @@ exports.purgar_anteriores = function(limite) {
     for (let letra in lst_letras) {
         lst_letras[letra] = lst_letras[letra].filter(item => {
             const t = new Date(item.date_time).getTime()
-            if (!isNaN(t) && t < lim) { quitados.add(item); return false }
+            // Los precios de negocios no se purgan por antigüedad
+            if (!item.negocio && !isNaN(t) && t < lim) { quitados.add(item); return false }
             return true
         })
         if (lst_letras[letra].length === 0) delete lst_letras[letra]
