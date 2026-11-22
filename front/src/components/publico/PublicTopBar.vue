@@ -2,7 +2,7 @@
   <header class="pub-topbar" :class="{ 'is-scrolled': scrolled || menuAbierto }">
     <nav class="pub-container pub-topbar__inner" aria-label="Navegación principal">
       <a class="pub-topbar__brand" href="#/" aria-label="Precios de Tandil - inicio">
-        <span class="pub-topbar__logo" aria-hidden="true"><Icon name="bi-tag-fill" /></span>
+        <span class="pub-topbar__logo" aria-hidden="true"><Icon name="bi-tags-fill" /></span>
         <span>Precios de Tandil</span>
       </a>
 
@@ -18,10 +18,10 @@
       </div>
 
       <div class="d-flex align-items-center gap-2 ms-auto">
-        <button v-if="storeApp.ruta_actual.path == '/carga_precio'" class="btn btn-sm btn-primary d-md-none" type="button" @click="agregar">
+        <button v-if="storeApp.ruta_actual.path == '/carga_precio'" class="btn btn-sm btn-primary d-lg-none" type="button" @click="agregar">
           <Icon name="bi-plus-lg" /> Agregar
         </button>
-        <button v-if="storeApp.ruta_actual.path == '/ofertas'" class="btn btn-sm btn-outline-primary d-md-none" type="button" @click="filtrar">
+        <button v-if="storeApp.ruta_actual.path == '/ofertas'" class="btn btn-sm btn-outline-primary d-lg-none" type="button" @click="abrir_filtros">
           <Icon name="bi-funnel" /> Filtrar
         </button>
 
@@ -47,14 +47,24 @@
           <button v-if="!isLogged" class="btn btn-primary btn-sm" type="button" @click="irIngresar">
             <Icon name="bi-box-arrow-in-right" /> Ingresar
           </button>
-          <template v-else>
-            <button class="btn btn-primary btn-sm" type="button" @click="irDashboard">
-              <Icon name="bi-person-circle" class="me-1" />{{ storeApp.userInfo?.name || 'Mi cuenta' }}
+          <div v-else ref="menu_ref" class="pub-topbar__user">
+            <button type="button" class="btn btn-outline-primary btn-sm" aria-haspopup="menu"
+                    :aria-expanded="String(menu_usuario)" @click="menu_usuario = !menu_usuario">
+              <Icon name="bi-person-circle" class="me-1" />{{ nombre_usuario }}
             </button>
-            <button class="btn btn-sm btn-outline-secondary" type="button" title="Cerrar sesión" aria-label="Cerrar sesión" @click="cerrar_sesion">
-              <Icon name="bi-box-arrow-right" />
-            </button>
-          </template>
+            <div v-if="menu_usuario" class="pub-topbar__dropdown" role="menu" @keydown.esc="menu_usuario = false">
+              <div class="pub-topbar__dd-head">
+                <div class="pub-topbar__dd-name">{{ nombre_usuario }}</div>
+                <div v-if="storeApp.userInfo?.email" class="pub-topbar__dd-mail">{{ storeApp.userInfo.email }}</div>
+              </div>
+              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irDashboard">
+                <Icon name="bi-person-gear" /> Mi cuenta
+              </button>
+              <button type="button" class="pub-topbar__dd-item pub-topbar__dd-item--danger" role="menuitem" @click="cerrar_sesion">
+                <Icon name="bi-box-arrow-right" /> Cerrar sesión
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </nav>
@@ -62,14 +72,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watchEffect, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watchEffect, watch } from 'vue'
 
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
 import { router } from "../../router"
 import { getToken, getUserInfo, setUserInfo, logout } from "../../utils/auth"
 
-const emit  = defineEmits(['buscar_evnt', 'agregar_evnt', 'filtrar_evnt'])
+const emit  = defineEmits(['buscar_evnt', 'agregar_evnt', 'filtrar_evnt', 'filtros_evnt'])
 const storeApp = AppStore()
 const route = useRoute()
 
@@ -79,6 +89,17 @@ const termino_busqueda = ref('')
 const termino_filtro = ref('')
 const scrolled = ref(false)
 const menuAbierto = ref(false)
+const menu_usuario = ref(false)
+const menu_ref = ref(null)
+
+const nombre_usuario = computed(() => {
+  const u = storeApp.userInfo || {}
+  return [u.name, u.apellido].filter(Boolean).join(' ') || u.email || 'Mi cuenta'
+})
+
+function on_click_fuera(e){
+  if (menu_usuario.value && menu_ref.value && !menu_ref.value.contains(e.target)) menu_usuario.value = false
+}
 
 function onScroll(){ scrolled.value = (window.scrollY || 0) > 8 }
 function onKey(e){ if (e.key === 'Escape') menuAbierto.value = false }
@@ -126,11 +147,16 @@ async function irDashboard(){
 }
 
 function cerrar_sesion(){
+  menu_usuario.value = false
   logout(storeApp)
 }
 
 function filtrar(){
   emit('filtrar_evnt', termino_filtro.value)
+}
+
+function abrir_filtros(){
+  emit('filtros_evnt')
 }
 
 function buscar(){
@@ -147,12 +173,14 @@ onMounted(()=>{
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('keydown', onKey)
+    document.addEventListener('click', on_click_fuera)
 })
 
 onBeforeUnmount(()=>{
     document.body.classList.remove('cls-public')
     window.removeEventListener('scroll', onScroll)
     window.removeEventListener('keydown', onKey)
+    document.removeEventListener('click', on_click_fuera)
 })
 </script>
 
@@ -219,6 +247,23 @@ onBeforeUnmount(()=>{
   }
   &__account { display: flex; gap: .5rem; align-items: center;
     @media (max-width: 991.98px) { padding-top: var(--gb-space-3); border-top: 1px solid var(--gb-border); } }
+  &__user { position: relative; }
+  &__dropdown {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 1040;
+    min-width: 240px; padding: var(--gb-space-2);
+    background: var(--gb-surface); border: 1px solid var(--gb-border);
+    border-radius: var(--gb-radius); box-shadow: var(--gb-shadow-lg);
+  }
+  &__dd-head { padding: var(--gb-space-2) var(--gb-space-3) var(--gb-space-3); border-bottom: 1px solid var(--gb-border); margin-bottom: var(--gb-space-2); }
+  &__dd-name { font-weight: 600; color: var(--gb-heading); }
+  &__dd-mail { font-size: .8125rem; color: var(--gb-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__dd-item {
+    display: flex; align-items: center; gap: var(--gb-space-2); width: 100%;
+    padding: var(--gb-space-2) var(--gb-space-3); border: 0; background: transparent;
+    border-radius: var(--gb-radius-sm); color: var(--gb-text); font-size: .9rem; text-align: left;
+    &:hover, &:focus-visible { background: var(--gb-surface-2); outline: none; }
+    &--danger { color: var(--gb-danger); &:hover { background: var(--gb-danger-soft); } }
+  }
   @media (min-width: 992px) { &__nav { margin-left: auto; } }
 }
 .navbar-filter { width: min(240px, 40vw); }

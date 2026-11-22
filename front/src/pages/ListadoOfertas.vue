@@ -1,5 +1,5 @@
 <template>
-    <PublicTopBar @filtrar_evnt="desplegar_filtros"/>
+    <PublicTopBar @filtros_evnt="desplegar_filtros"/>
 
     <main class="pub-main" id="ofertas-cnt">
       <div class="pub-container">

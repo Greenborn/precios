@@ -30,3 +30,25 @@ export function guardar_foto_articulo(branchId, productId, imagen) {
 export function listar_fotos_local(branchId) {
   return http.get(`/api/negocio/locales/${branchId}/fotos`).then((r) => r.data)
 }
+
+// Ficha pública del negocio (sin login). `perfilId` es perfiles.id (igual que /api/perfil/publico/:id).
+export function obtener_perfil_publico(perfilId) {
+  return http.get(`/api/perfil/publico/${perfilId}`).then((r) => r.data)
+}
+
+export function listar_locales_publicos_negocio(perfilId) {
+  return http.get(`/api/negocio/publico/${perfilId}/locales`).then((r) => r.data)
+}
+
+export function listar_productos_publicos_negocio(perfilId, { limit = 50, offset = 0 } = {}) {
+  return http.get(`/api/negocio/publico/${perfilId}/productos`, { params: { limit, offset } }).then((r) => r.data)
+}
+
+// Las fotos se sirven desde el backend (FOTOS_URL es relativa a su raíz)
+export function url_absoluta_backend(ruta) {
+  return ruta ? `${import.meta.env.VITE_APP_BACKEND_ADMIN}${ruta}` : null
+}
+
+export function obtener_mi_perfil() {
+  return http.get('/api/perfil/mi-perfil').then((r) => r.data)
+}

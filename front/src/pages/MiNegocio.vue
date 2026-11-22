@@ -5,7 +5,13 @@
     <div class="pub-container pub-container--md">
       <PageHeader title="Mi negocio" icon="bi-shop-window"
                   subtitle="Editá el perfil de tu negocio, administrá sus locales y cargá los precios de tus artículos."
-                  :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Mi negocio' }]" />
+                  :breadcrumbs="[{ label: 'Inicio', to: '/' }, { label: 'Mi negocio' }]">
+        <template #actions>
+          <router-link v-if="perfil_id" class="btn btn-outline-primary btn-sm" :to="'/negocio/' + perfil_id">
+            <Icon name="bi-eye" /> Ver ficha pública
+          </router-link>
+        </template>
+      </PageHeader>
 
       <div v-if="mensajeExito" class="alert alert-success d-flex align-items-center gap-2" role="status">
         <Icon name="bi-check-circle-fill" /> <span class="flex-grow-1">{{ mensajeExito }}</span>
@@ -143,7 +149,7 @@ import PublicFooter from '../components/publico/PublicFooter.vue'
 import { PerfilEditor } from '@greenborn/vue-greenborn-perfil'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, cargar_precios_negocio, guardar_foto_articulo } from '../api/negocio'
+import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -175,7 +181,11 @@ function mensaje_error(err, por_defecto = 'Ocurrió un error, reintente luego') 
   return err?.response?.data?.error || err?.response?.data?.message || por_defecto
 }
 
-onMounted(() => cargar())
+const perfil_id = ref(null)
+onMounted(() => {
+  cargar()
+  obtener_mi_perfil().then((p) => { perfil_id.value = p?.id ?? null }).catch(() => {})
+})
 
 function coordenada(valor) {
   const s = String(valor ?? '').trim().replace(',', '.')
