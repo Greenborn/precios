@@ -19,9 +19,9 @@
       </ol>
 
       <div class="mt-4">
-        <router-link to="/admin/login" class="btn btn-primary">
+        <button type="button" class="btn btn-primary" @click="ingresarConGoogle">
           <Icon name="bi-google" class="me-1" /> Registrarme / ingresar con Google
-        </router-link>
+        </button>
       </div>
 
       <p class="small gb-text-muted mt-4 mb-0">Tratamos tus datos según la <router-link to="/privacidad">política de privacidad</router-link>.</p>
@@ -34,4 +34,11 @@
 <script setup>
     import PublicTopBar from '../components/publico/PublicTopBar.vue';
     import PublicFooter from '../components/publico/PublicFooter.vue';
+    import { iniciar_sso, setRedirectAfterLogin } from '../utils/sso'
+
+    // El destino se guarda antes de redirigir: el SSO pierde la query al volver
+    function ingresarConGoogle(){
+      setRedirectAfterLogin('/mi-negocio')
+      iniciar_sso()
+    }
 </script>

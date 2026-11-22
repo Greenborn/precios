@@ -20,7 +20,6 @@
           <h2>Comunidad</h2>
           <ul>
             <li><a href="https://www.facebook.com/TandilPreciosBaratos" target="_blank" rel="noopener"><Icon name="bi-facebook" /> TandilPreciosBaratos</a></li>
-            <li><a href="https://cafecito.app/tandil_precios" target="_blank" rel="noopener"><Icon name="bi-cup-hot" /> Quiero aportar</a></li>
           </ul>
         </div>
         <nav aria-label="Legal">
