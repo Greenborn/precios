@@ -43,6 +43,76 @@ router.use('/perfil', createPerfilRouter({
   terminos: cfg.TERMINOS_NEGOCIO,
 }))
 
+// ---------- Portada y foto de perfil ----------
+// GET    /api/negocio/mi-perfil/imagenes          -> { portada_url, foto_url }
+// PUT    /api/negocio/mi-perfil/imagen/:tipo      -> body { imagen: dataURL }, tipo = portada | foto
+// DELETE /api/negocio/mi-perfil/imagen/:tipo
+const TIPOS_IMG_PERFIL = { portada: 'portada_archivo', foto: 'foto_archivo' }
+
+function url_perfil_img(archivo) {
+  return archivo ? `${cfg.PERFIL_IMG_URL}/${archivo}` : null
+}
+
+function borrar_img_perfil(prefijo) {
+  if (!fs.existsSync(cfg.PERFIL_IMG_DIR)) return
+  for (const f of fs.readdirSync(cfg.PERFIL_IMG_DIR)) {
+    if (f.startsWith(prefijo)) fs.unlinkSync(path.join(cfg.PERFIL_IMG_DIR, f))
+  }
+}
+
+router.get('/negocio/mi-perfil/imagenes', sesion, async (req, res) => {
+  try {
+    const p = await knex('perfiles').where({ usuario_id: req.user.id }).first('portada_archivo', 'foto_archivo')
+    res.json({ portada_url: url_perfil_img(p?.portada_archivo), foto_url: url_perfil_img(p?.foto_archivo) })
+  } catch (err) {
+    console.error('[negocio] GET imagenes perfil', err)
+    res.status(500).json({ error: 'No se pudieron obtener las imágenes' })
+  }
+})
+
+router.put('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
+  try {
+    const columna = TIPOS_IMG_PERFIL[req.params.tipo]
+    if (!columna) return res.status(400).json({ error: 'Tipo de imagen inválido' })
+    const m = DATA_URL_IMAGEN.exec(String(req.body?.imagen || ''))
+    if (!m) return res.status(400).json({ error: 'La imagen debe ser JPG, PNG o WEBP' })
+    const buf = Buffer.from(m[2].replace(/\s/g, ''), 'base64')
+    if (!buf.length) return res.status(400).json({ error: 'La imagen está vacía' })
+    if (buf.length > cfg.PERFIL_IMG_MAX_BYTES) return res.status(413).json({ error: 'La imagen supera el máximo de 3 MB' })
+    const ext = detectar_tipo_imagen(buf)
+    if (!ext) return res.status(400).json({ error: 'El archivo no es una imagen JPG, PNG o WEBP válida' })
+
+    fs.mkdirSync(cfg.PERFIL_IMG_DIR, { recursive: true })
+    const prefijo = `${req.user.id}_${req.params.tipo}.`
+    borrar_img_perfil(prefijo)
+    // Nombre con marca de tiempo para evitar caché del navegador al reemplazar
+    const archivo = `${req.user.id}_${req.params.tipo}.${Date.now()}.${ext}`
+    fs.writeFileSync(path.join(cfg.PERFIL_IMG_DIR, archivo), buf)
+
+    const existe = await knex('perfiles').where({ usuario_id: req.user.id }).first('id')
+    if (existe) await knex('perfiles').where({ usuario_id: req.user.id }).update({ [columna]: archivo })
+    else await knex('perfiles').insert({ usuario_id: req.user.id, [columna]: archivo })
+
+    res.json({ url: url_perfil_img(archivo) })
+  } catch (err) {
+    console.error('[negocio] PUT imagen perfil', err)
+    res.status(500).json({ error: 'No se pudo guardar la imagen' })
+  }
+})
+
+router.delete('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
+  try {
+    const columna = TIPOS_IMG_PERFIL[req.params.tipo]
+    if (!columna) return res.status(400).json({ error: 'Tipo de imagen inválido' })
+    borrar_img_perfil(`${req.user.id}_${req.params.tipo}.`)
+    await knex('perfiles').where({ usuario_id: req.user.id }).update({ [columna]: null })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[negocio] DELETE imagen perfil', err)
+    res.status(500).json({ error: 'No se pudo quitar la imagen' })
+  }
+})
+
 // ---------- Foto por artículo (una por local + artículo) ----------
 const ID_PRODUCTO = /^[A-Za-z0-9-]{1,36}$/
 const DATA_URL_IMAGEN = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/
@@ -221,6 +291,19 @@ async function locales_publicos(usuarioId) {
     longitud: f.longitude == null ? null : Number(f.longitude),
   }))
 }
+
+router.get('/negocio/publico/:perfilId/imagenes', async (req, res) => {
+  try {
+    const perfilId = Number(req.params.perfilId)
+    if (!Number.isInteger(perfilId) || perfilId <= 0) return res.status(400).json({ error: 'Identificador de negocio inválido' })
+    const p = await knex('perfiles').where({ id: perfilId }).first('portada_archivo', 'foto_archivo')
+    if (!p) return res.status(404).json({ error: 'negocio no encontrado' })
+    res.json({ portada_url: url_perfil_img(p.portada_archivo), foto_url: url_perfil_img(p.foto_archivo) })
+  } catch (err) {
+    console.error('[negocio] GET imagenes publicas', err)
+    res.status(500).json({ error: 'No se pudieron obtener las imágenes' })
+  }
+})
 
 router.get('/negocio/publico/:perfilId/locales', async (req, res) => {
   try {

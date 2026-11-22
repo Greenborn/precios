@@ -4,7 +4,7 @@
 // - Carga de precios: usa el request del proyecto, igual que el resto de /publico.
 import axios from 'axios'
 import request from '@/helpers/request'
-import { getToken } from '@/utils/auth'
+import { getToken, setToken } from '@/utils/auth'
 
 export const http = axios.create({
   baseURL: import.meta.env.VITE_APP_BACKEND_ADMIN,
@@ -17,6 +17,21 @@ http.interceptors.request.use((config) => {
   if (token) config.headers['x-api-key'] = token
   return config
 })
+
+// Sesión vencida o inválida: se descarta el token y se lleva al login volviendo a la página actual
+http.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401 && getToken()) {
+      setToken(null)
+      const destino = window.location.hash.replace(/^#/, '') || '/'
+      if (!destino.startsWith('/admin/login')) {
+        window.location.hash = '#/admin/login?redirect=' + encodeURIComponent(destino)
+      }
+    }
+    return Promise.reject(err)
+  }
+)
 
 // Carga de precios del local propio. Respuesta: { stat, items: { cargados, con_error, detalle } }
 export function cargar_precios_negocio(data) {
@@ -55,4 +70,21 @@ export function obtener_mi_perfil() {
 
 export function listar_mis_precios({ limit = 50, offset = 0 } = {}) {
   return http.get('/api/negocio/mis-precios', { params: { limit, offset } }).then((r) => r.data)
+}
+
+// Portada y foto de perfil del negocio (tipo: 'portada' | 'foto')
+export function obtener_mis_imagenes_perfil() {
+  return http.get('/api/negocio/mi-perfil/imagenes').then((r) => r.data)
+}
+
+export function guardar_imagen_perfil(tipo, imagen) {
+  return http.put(`/api/negocio/mi-perfil/imagen/${tipo}`, { imagen }).then((r) => r.data)
+}
+
+export function quitar_imagen_perfil(tipo) {
+  return http.delete(`/api/negocio/mi-perfil/imagen/${tipo}`).then((r) => r.data)
+}
+
+export function obtener_imagenes_publicas_negocio(perfilId) {
+  return http.get(`/api/negocio/publico/${perfilId}/imagenes`).then((r) => r.data)
 }

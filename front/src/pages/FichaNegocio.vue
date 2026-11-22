@@ -14,6 +14,7 @@
                   description="Ocurrió un error al cargar la ficha. Probá de nuevo en unos minutos." />
 
       <template v-else>
+        <CabeceraNegocio v-if="perfilId" :perfil-id="perfilId" :nombre="perfil?.nombre_comercial || 'Negocio'" class="mb-4" />
         <!-- 1. Perfil -->
         <Card title="Perfil" icon="bi-person-vcard" class="mb-4">
           <EmptyState v-if="cargandoPerfil" size="sm" icon="bi-hourglass-split" title="Cargando perfil" />
@@ -70,6 +71,7 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
 import { PerfilPublico } from '@greenborn/vue-greenborn-perfil'

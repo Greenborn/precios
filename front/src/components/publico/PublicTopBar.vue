@@ -86,13 +86,13 @@ import { ref, computed, onMounted, onBeforeUnmount, watchEffect, watch } from 'v
 import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
 import { router } from "../../router"
-import { getToken, getUserInfo, setUserInfo, logout } from "../../utils/auth"
+import { getToken, setToken, getUserInfo, setUserInfo, logout } from "../../utils/auth"
 
 const emit  = defineEmits(['buscar_evnt', 'agregar_evnt', 'filtrar_evnt', 'filtros_evnt'])
 const storeApp = AppStore()
 const route = useRoute()
 
-const isLogged = !!getToken()
+const isLogged = ref(!!getToken())
 
 const termino_busqueda = ref('')
 const termino_filtro = ref('')
@@ -186,11 +186,12 @@ function agregar(){
 
 async function cargar_usuario(){
   // En páginas públicas la sesión no se hidrata sola: se carga para mostrar nombre y accesos
-  if (!isLogged || storeApp.userInfo) return
+  if (!isLogged.value || storeApp.userInfo) return
   try {
     const info = await getUserInfo('admin')
     if (info && info.stat) setUserInfo('admin', storeApp, info.data, router, getToken())
-  } catch (e) { /* sin sesión válida: se muestra el menú mínimo */ }
+    else { setToken(null); isLogged.value = false } // cookie vencida: se vuelve a mostrar "Ingresar"
+  } catch (e) { /* error de red: se mantiene el menú mínimo */ }
 }
 
 onMounted(()=>{

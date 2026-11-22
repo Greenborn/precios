@@ -23,6 +23,11 @@ const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploa
 const FOTOS_DIR = path.join(UPLOADS_DIR, 'articulos')
 const FOTOS_URL = '/uploads/articulos'
 
+// Portada y foto de perfil del negocio
+const PERFIL_IMG_MAX_BYTES = 3 * 1024 * 1024
+const PERFIL_IMG_DIR = path.join(UPLOADS_DIR, 'perfiles')
+const PERFIL_IMG_URL = '/uploads/perfiles'
+
 module.exports = {
   CAMPOS_PERFIL,
   CAMPOS_LOCALES_EXTRA,
@@ -33,4 +38,7 @@ module.exports = {
   UPLOADS_DIR,
   FOTOS_DIR,
   FOTOS_URL,
+  PERFIL_IMG_MAX_BYTES,
+  PERFIL_IMG_DIR,
+  PERFIL_IMG_URL,
 }

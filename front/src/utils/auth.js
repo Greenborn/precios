@@ -22,6 +22,8 @@ export function getToken() {
 }
 
 export function setToken(token) {
+  // Sin token (logout / sesión inválida) se borra la cookie: Cookies.set(k, null) guardaría "null" (truthy)
+  if (!token) return Cookies.remove(TokenKey)
   return Cookies.set(TokenKey, token)
 }
 

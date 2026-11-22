@@ -20,6 +20,7 @@
 
       <!-- 1. Perfil -->
       <Card id="seccion-perfil" title="1. Perfil del negocio" icon="bi-person-vcard" class="mb-4">
+        <CabeceraNegocio editable class="mb-4" />
         <PerfilEditor :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
       </Card>
 
@@ -125,7 +126,11 @@
                 <label :for="'p_foto' + index" class="form-label small mb-1">Foto (opcional, una por artículo)</label>
                 <input :id="'p_foto' + index" type="file" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp"
                        @change="elegir_foto(fila, $event)">
-                <small v-if="fila.foto" class="form-text gb-text-muted">{{ fila.foto.name }} · se reemplaza la foto previa del artículo</small>
+                <div v-if="fila.foto" class="d-flex align-items-center gap-2 mt-1">
+                  <img :src="fila.foto.dataUrl" alt="Foto encuadrada" class="rounded" width="48" height="48" style="object-fit:cover">
+                  <small class="form-text gb-text-muted m-0">Se reemplaza la foto previa del artículo</small>
+                  <button type="button" class="btn btn-link btn-sm p-0" @click="fila.foto = null">Quitar</button>
+                </div>
               </div>
             </div>
             <Button variant="ghost" severity="danger" icon="bi-trash" :ariaLabel="'Quitar artículo ' + (index + 1)" @click="quitar_fila(index)" />
@@ -161,12 +166,17 @@
       </Card>
     </div>
   </main>
+
+  <RecorteModal :archivo="foto_pendiente.archivo" :ancho="800" :alto="800" titulo="Encuadrar foto del artículo"
+                texto-aceptar="Usar esta foto" @aceptar="aceptar_recorte" @cancelar="foto_pendiente = { fila: null, archivo: null }" />
   <PublicFooter />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
+import RecorteModal from '../components/publico/RecorteModal.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
 import { PerfilEditor } from '@greenborn/vue-greenborn-perfil'
@@ -297,6 +307,14 @@ function quitar_fila(index) {
   filas.value.splice(index, 1)
 }
 
+// Foto del artículo en curso de encuadre (el archivo se recorta a 800x800 antes de adjuntarse)
+const foto_pendiente = ref({ fila: null, archivo: null })
+
+function aceptar_recorte(dataUrl) {
+  if (foto_pendiente.value.fila) foto_pendiente.value.fila.foto = { dataUrl }
+  foto_pendiente.value = { fila: null, archivo: null }
+}
+
 function elegir_foto(fila, evento) {
   const archivo = evento.target.files?.[0] || null
   if (!archivo) {
@@ -315,16 +333,9 @@ function elegir_foto(fila, evento) {
     fila.foto = null
     return
   }
-  fila.foto = archivo
-}
-
-function leer_como_data_url(archivo) {
-  return new Promise((resolver, rechazar) => {
-    const lector = new FileReader()
-    lector.onload = () => resolver(lector.result)
-    lector.onerror = () => rechazar(lector.error)
-    lector.readAsDataURL(archivo)
-  })
+  fila.foto = null
+  foto_pendiente.value = { fila, archivo }
+  evento.target.value = ''
 }
 
 async function enviar_precios() {
@@ -362,7 +373,7 @@ async function enviar_precios() {
       const archivo = validos[d.indice]?.foto
       if (!d.ok || !archivo) continue
       try {
-        await guardar_foto_articulo(local_precios.value, d.product_id, await leer_como_data_url(archivo))
+        await guardar_foto_articulo(local_precios.value, d.product_id, archivo.dataUrl)
         fotos_ok++
       } catch {
         fotos_err++
