@@ -14,8 +14,6 @@
 <script setup>
 const accesos = [
   { to: '/ofertas', icon: 'bi-lightning-charge', title: 'Ofertas', desc: 'Promociones vigentes agrupadas por comercio.' },
-  { to: '/categorias', icon: 'bi-diagram-3', title: 'Categorías', desc: 'Navegá productos por rubro y categoría.' },
-  { to: '/calcula_trueque', icon: 'bi-arrow-left-right', title: 'Calculadora', desc: 'Compará cuánto vale un producto en otro.' },
   { to: '/carga_precio', icon: 'bi-cloud-upload', title: 'Carga comunitaria', desc: 'Sumá los precios que viste en tu compra.' },
   { to: '/estadisticas', icon: 'bi-bar-chart-line', title: 'Estadísticas', desc: 'Variaciones de precios día a día.' }
 ]
