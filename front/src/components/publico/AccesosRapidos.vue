@@ -15,6 +15,5 @@
 const accesos = [
   { to: '/ofertas', icon: 'bi-lightning-charge', title: 'Ofertas', desc: 'Promociones vigentes agrupadas por comercio.' },
   { to: '/carga_precio', icon: 'bi-cloud-upload', title: 'Carga comunitaria', desc: 'Sumá los precios que viste en tu compra.' },
-  { to: '/estadisticas', icon: 'bi-bar-chart-line', title: 'Estadísticas', desc: 'Variaciones de precios día a día.' }
 ]
 </script>
