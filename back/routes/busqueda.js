@@ -22,7 +22,8 @@ async function hacer_busqueda( termino, metodo ){
           const t = new Date(p.date_time).getTime()
           return isNaN(t) || t >= desde
         }))
-      }
+      } else
+        resolve([])
 
     } catch (error) {
       console.log(error)

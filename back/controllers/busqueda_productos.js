@@ -1,26 +1,55 @@
-let lst_letras = {}
+// Índice en memoria: Map clave "product_id|branch_id" -> entradas (un precio por fecha).
+// Antes había un bucket por letra con cada entrada repetida ~20 veces, lo que hacía
+// carísimo agregar/eliminar (recorría todos los buckets) y la búsqueda copiaba y
+// ordenaba listas enteras por cada palabra.
+let indice = new Map()
+let lista_cache = null   // vista plana del índice, se reconstruye solo si cambió
+
+function clave(product_id, branch_id) {
+    return String(product_id) + '|' + String(branch_id)
+}
+
+function lista() {
+    if (lista_cache) return lista_cache
+    const out = []
+    for (const arr of indice.values())
+        for (let i = 0; i < arr.length; i++) out.push(arr[i])
+    lista_cache = out
+    return out
+}
 
 // Normalización común para índice y término: minúsculas, sin diacríticos
 // (salvo ñ) y espacios colapsados. Debe ser la misma en ambos lados para que
 // "azucar" encuentre "Azúcar".
+// También se quitan los caracteres que utils.limpiarTexto saca del término de
+// búsqueda (; { } ( ) * / \ ` ' ") para que un nombre que los contenga ("1/2 kg",
+// "(x6)") siga siendo encontrable, y '-'/'_' se tratan como separador de palabras
+// ("coca-cola" <-> "coca cola").
 function normalizar(texto) {
     return String(texto || '').normalize('NFD')
         .replace(/([^n\u0300-\u036f]|n(?!\u0303(?![\u0300-\u036f])))[\u0300-\u036f]+/gi, "$1")
-        .normalize().toLowerCase().replace(/\s+/g, ' ').trim()
+        .normalize().toLowerCase()
+        .replace(/[;{}()*\/\\`'"]/g, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\s+/g, ' ').trim()
 }
 exports.normalizar = normalizar
 
-function obtener_propiedades(name) {
-    let letras = {}
-    const nameLower = normalizar(name)
-
-    for (let i = 0; i < nameLower.length; i++) {
-        if (!letras[nameLower[i]])
-            letras[nameLower[i]] = []
-
-        letras[nameLower[i]].push(i)
+function crear_entrada(p, nombre) {
+    return {
+        'name':       nombre,
+        'nameLower':  normalizar(nombre),
+        'product_id': p.product_id,
+        'price':      p.price,
+        'branch_id':  p.branch_id,
+        'date_time':  p.date_time,
+        'time':       p.time,
+        'url':        p.url || null,
+        'user_id':        p.user_id || null,
+        'user_nombre':    p.user_nombre || null,
+        'user_apellido':  p.user_apellido || null,
+        'negocio':        !!p.negocio,
     }
-    return letras
 }
 
 const precios_negocio = require('./precios_negocio')
@@ -31,7 +60,7 @@ exports.inicializa_buscador = async function() {
 
     // Se reconstruye desde cero: regenerar_diccionarios se invoca en caliente
     // (ABM alias, categorías, comercios) y sin reset se duplicaban entradas.
-    const nuevo_indice = {}
+    const nuevo_indice = new Map()
 
     // Usar price_today para inicializar el buscador
     const filasHoy = await global.knex('price_today').select()
@@ -44,32 +73,13 @@ exports.inicializa_buscador = async function() {
     for (let i = 0; i < productosHoy.length; i++) {
         const nombre = productosHoy[i].product_name
         if (!nombre) continue
-        const nombreLower = normalizar(nombre)  // Para indexación
-        let props = obtener_propiedades(nombre)
-        let aux = {
-            'dsc':        props,
-            'name':       nombre,  // Guardamos el nombre original
-            'nameLower':  nombreLower,  // Guardamos versión en minúsculas para búsqueda
-            'product_id': productosHoy[i].product_id,
-            'price':      productosHoy[i].price,
-            'branch_id':  productosHoy[i].branch_id,
-            'date_time':  productosHoy[i].date_time,
-            'time':       productosHoy[i].time,
-            'url':        productosHoy[i].url,
-            'user_id':        productosHoy[i].user_id || null,
-            'user_nombre':    productosHoy[i].user_nombre || null,
-            'user_apellido':  productosHoy[i].user_apellido || null,
-            'negocio':        !!productosHoy[i].negocio,
-        }
-        let o_k = Object.keys(props)
-        for (let j = 0; j < o_k.length; j++) {
-            const LETRA_NOMBRE = o_k[j]
-            if(!nuevo_indice[ LETRA_NOMBRE ])
-                nuevo_indice[ LETRA_NOMBRE ] = []
-            nuevo_indice[ LETRA_NOMBRE ].push(aux)
-        }
+        const aux = crear_entrada(productosHoy[i], nombre)
+        const k = clave(aux.product_id, aux.branch_id)
+        if (!nuevo_indice.has(k)) nuevo_indice.set(k, [])
+        nuevo_indice.get(k).push(aux)
     }
-    lst_letras = nuevo_indice
+    indice = nuevo_indice
+    lista_cache = null
     console.log('estructura de busqueda generada basada en price_today.')
 }
 
@@ -79,18 +89,9 @@ exports.inicializa_buscador = async function() {
  * @param {number} branch_id - ID de la sucursal
  */
 exports.eliminar_de_buscador = function(product_id, branch_id) {
-    // Comparación por String: los ids llegan como number o string según el origen
-    const pid = String(product_id)
-    const bid = String(branch_id)
-    for (let letra in lst_letras) {
-        lst_letras[letra] = lst_letras[letra].filter(item =>
-            !(String(item.product_id) === pid && String(item.branch_id) === bid)
-        )
-        // Limpiar arrays vacíos para optimizar memoria
-        if (lst_letras[letra].length === 0) {
-            delete lst_letras[letra]
-        }
-    }
+    // Clave por String: los ids llegan como number o string según el origen
+    if (indice.delete(clave(product_id, branch_id)))
+        lista_cache = null
 }
 
 /**
@@ -115,35 +116,13 @@ exports.agregar_a_buscador = function(producto) {
     // Eliminar el producto existente si ya está en la estructura (mismo product_id y branch_id)
     exports.eliminar_de_buscador(producto.product_id, producto.branch_id)
 
-    // Crear la nueva entrada
     const nombre = producto.product_name
-    const nombreLower = normalizar(nombre)
-    let props = obtener_propiedades(nombre)
-    let aux = {
-        'dsc':        props,
-        'name':       nombre,  // Guardamos el nombre original
-        'nameLower':  nombreLower,  // Para indexación case-insensitive
-        'product_id': producto.product_id,
-        'price':      producto.price,
-        'branch_id':  producto.branch_id,
-        'date_time':  producto.date_time,
-        'time':       producto.time,
-        'url':        producto.url || null,
-        'user_id':        producto.user_id || null,
-        'user_nombre':    producto.user_nombre || null,
-        'user_apellido':  producto.user_apellido || null,
-        'negocio':        !!(producto.negocio || precios_negocio.es_negocio(producto.branch_id)),
-    }
-
-    // Agregar a cada letra correspondiente
-    let o_k = Object.keys(props)
-    for (let j = 0; j < o_k.length; j++) {
-        const LETRA_NOMBRE = o_k[j]
-        if (!lst_letras[LETRA_NOMBRE]) {
-            lst_letras[LETRA_NOMBRE] = []
-        }
-        lst_letras[LETRA_NOMBRE].push(aux)
-    }
+    const aux = crear_entrada({
+        ...producto,
+        negocio: producto.negocio || precios_negocio.es_negocio(producto.branch_id),
+    }, nombre)
+    indice.set(clave(aux.product_id, aux.branch_id), [aux])
+    lista_cache = null
 
     console.log(`[busqueda_productos] Producto agregado/actualizado en buscador: ${nombre} (${producto.product_id} - ${producto.branch_id})`)
     return true
@@ -156,79 +135,53 @@ exports.agregar_a_buscador = function(producto) {
  */
 exports.purgar_anteriores = function(limite) {
     const lim = new Date(limite).getTime()
-    let quitados = new Set()
-    for (let letra in lst_letras) {
-        lst_letras[letra] = lst_letras[letra].filter(item => {
+    const quitados = []
+    for (const [k, arr] of indice) {
+        const quedan = arr.filter(item => {
             const t = new Date(item.date_time).getTime()
             // Los precios de negocios no se purgan por antigüedad
-            if (!item.negocio && !isNaN(t) && t < lim) { quitados.add(item); return false }
+            if (!item.negocio && !isNaN(t) && t < lim) { quitados.push(item); return false }
             return true
         })
-        if (lst_letras[letra].length === 0) delete lst_letras[letra]
+        if (quedan.length === 0) indice.delete(k)
+        else if (quedan.length !== arr.length) indice.set(k, quedan)
     }
-    return [...quitados]
+    if (quitados.length) lista_cache = null
+    return quitados
 }
 
+// Búsqueda AND por palabras: cada palabra debe aparecer como subcadena del nombre
+// normalizado (en cualquier orden). Resultado ordenado por precio ascendente.
 exports.busqueda = async function( termino, limit = -1 ) {
-    termino = normalizar(termino)
-    let palabras = termino.split(" ").filter(p => p.length > 0)
+    const palabras = [...new Set(normalizar(termino).split(' ').filter(p => p.length > 0))]
     if (palabras.length === 0) return []
-    let encontrados = []
-    let encontrados_k = []
-    const p_letra = termino[0]
-    if (!lst_letras[p_letra])
-        return []
-    let listado = [ ...lst_letras[p_letra] ]
-    for (let c = 0; c < palabras.length; c++) {
-        const palabra = palabras[c]
-        encontrados = []
-        encontrados_k = []
-        let primera_letra = palabra[0]
-        for (let i = 0; i < listado.length; i++) {
-            const e_actual = listado[i]
-            if (!e_actual.dsc[primera_letra])
-                continue
-            const posiciones_letras = e_actual.dsc[primera_letra]
-            let encontrado = false
-            for (let NUM_APARICION = 0; NUM_APARICION < posiciones_letras.length && !encontrado; NUM_APARICION++) {
-                let POS_T = 0
-                // Usar nameLower para comparación case-insensitive
-                for (let POS_LETRA = posiciones_letras[NUM_APARICION]; POS_LETRA < e_actual.nameLower.length; POS_LETRA++) {
-                    const letra_db = e_actual.nameLower[POS_LETRA]
-                    if (letra_db != palabra[POS_T])
-                        break
-                    POS_T++
-                    if (POS_T == palabra.length) {
-                        // push matching entry
-                        encontrados_k.push({
-                            'id':e_actual.id,
-                            'name':e_actual.name,  // Retornar nombre original con mayúsculas/minúsculas
-                            'price':e_actual.price,
-                            'branch_id':e_actual.branch_id,
-                            'product_id':e_actual.product_id,
-                            'date_time':e_actual.date_time,
-                            'time':e_actual.time,
-                            'url':e_actual.url,
-                            'user_id':e_actual.user_id || null,
-                            'user_nombre':e_actual.user_nombre || null,
-                            'user_apellido':e_actual.user_apellido || null
-                        })
-                        encontrados.push(e_actual)
-                        encontrado = true  // una sola vez por entrada aunque la palabra aparezca repetida
-                        break
-                    }
-                }
-            }
+    // Palabras más largas primero: descartan antes
+    palabras.sort((a, b) => b.length - a.length)
+    const np = palabras.length
+    const encontrados = []
+    const todo = lista()
+    for (let i = 0; i < todo.length; i++) {
+        const e = todo[i]
+        const nombre = e.nameLower
+        let ok = true
+        for (let w = 0; w < np; w++) {
+            if (!nombre.includes(palabras[w])) { ok = false; break }
         }
-        if (encontrados.length == 0)
-            return []
-        // ordenar los resultados intermedios por precio ascendente para mantener
-        // la lista ordenada a través de iteraciones de palabras
-        encontrados.sort((a, b) => a.price - b.price)
-        encontrados_k.sort((a, b) => a.price - b.price)
-        listado = [...encontrados]
+        if (ok) encontrados.push(e)
     }
-    // garantía adicional: el arreglo final también debe estar ordenado
-    encontrados_k.sort((a, b) => a.price - b.price)
-    return encontrados_k
+    encontrados.sort((a, b) => a.price - b.price)
+    // Sin truncar por `limit`: el router pagina y necesita el total real
+    return encontrados.map(e => ({
+        'id':e.id,
+        'name':e.name,  // nombre original con mayúsculas/minúsculas
+        'price':e.price,
+        'branch_id':e.branch_id,
+        'product_id':e.product_id,
+        'date_time':e.date_time,
+        'time':e.time,
+        'url':e.url,
+        'user_id':e.user_id,
+        'user_nombre':e.user_nombre,
+        'user_apellido':e.user_apellido
+    }))
 }

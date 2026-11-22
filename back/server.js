@@ -28,7 +28,9 @@ let conn_obj = {
 global.knex = require('knex')({
   client: 'mysql2',
   connection: conn_obj,
-  pool: { min: 0, max: 1000, "propagateCreateError": false }
+  pool: { min: 0, max: 1000, "propagateCreateError": false },
+  // Ruta absoluta: las migraciones se aplican al iniciar sin depender del cwd del proceso (PM2)
+  migrations: { directory: path.join(__dirname, 'migrations'), tableName: 'knex_migrations' }
 });
 global.branchs_diccio = {}
 global.branch_enterprice_diccio = {}
