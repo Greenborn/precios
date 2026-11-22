@@ -57,14 +57,11 @@
                 <div class="pub-topbar__dd-name">{{ nombre_usuario }}</div>
                 <div v-if="storeApp.userInfo?.email" class="pub-topbar__dd-mail">{{ storeApp.userInfo.email }}</div>
               </div>
-              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('perfil')">
-                <Icon name="bi-person-vcard" /> Mi perfil
-              </button>
-              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('locales')">
+              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('negocio')">
                 <Icon name="bi-shop-window" /> Mi negocio
               </button>
-              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('listado')">
-                <Icon name="bi-list-ul" /> Mis precios
+              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('precios')">
+                <Icon name="bi-basket" /> Mis precios
               </button>
               <button v-if="esAdmin" type="button" class="pub-topbar__dd-item" role="menuitem" @click="irDashboard">
                 <Icon name="bi-speedometer2" /> Panel de administración
