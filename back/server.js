@@ -239,6 +239,10 @@ async function base_de_datos_iniciada(){
   app_API.use("/publico", require("./middleware/Publico"))
   app_API.use("/admin", require("./middleware/Admin"))
 
+  //ÁREA PRIVADA DEL NEGOCIO: locales, perfil y foto por artículo (auth propia por ruta)
+  app_API.use("/uploads", require('express').static(require('./config/negocio').UPLOADS_DIR))
+  app_API.use("/api", require("./routes/negocio"))
+
   //RUTA INTERNA (solo para procesos internos, protegida por clave)
   const INTERNAL_SYNC_KEY = process.env.internal_sync_key
   app_API.post("/interno/sync_cache", async (req, res) => {

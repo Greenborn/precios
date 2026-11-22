@@ -1,10 +1,42 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
+import { VitePWA } from 'vite-plugin-pwa'
+
+const { version: appVersion } = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  define: {
+    // Versión del frontend (package.json), bumpeada por deploy-update.sh
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
+  plugins: [
+    vue(),
+    VitePWA({
+      // 'prompt': el SW nuevo no reemplaza al activo hasta que el usuario confirma
+      // (ver src/pwa.js + PwaUpdatePrompt.vue).
+      registerType: 'prompt',
+      injectRegister: null,
+      // El manifest sigue en public/manifest.json (linkeado desde index.html).
+      manifest: false,
+      workbox: {
+        // Las /api nunca se cachean (datos de sesión/precios).
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        globPatterns: ['**/*.{js,css,html,svg,ico,png,woff,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/images/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'images', expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 } },
+          },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   base: "",
   build: {
     //target: 'esnext',

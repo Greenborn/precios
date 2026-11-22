@@ -14,7 +14,6 @@
             <li><router-link to="/ofertas">Ofertas</router-link></li>
             <li><router-link to="/categorias">Categorías</router-link></li>
             <li><router-link to="/carga_precio">Carga de precios</router-link></li>
-            <li><router-link to="/novedades">Novedades</router-link></li>
           </ul>
         </nav>
         <div>

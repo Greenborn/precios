@@ -2,6 +2,7 @@
   <div class="admin-shell" :class="{ 'admin-shell--collapsed': collapsed }">
     <a href="#admin-main" class="admin-skip-link">Saltar al contenido</a>
     <AppTopbar />
+    <PwaUpdatePrompt />
 
     <SideMenu
       :items="menuItems"
@@ -28,6 +29,7 @@
 <script setup>
   import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
   import { provide } from 'vue'
+  import PwaUpdatePrompt from './PwaUpdatePrompt.vue'
   import { version } from '../../../package.json'
   import SideMenu, { HAS_PERMISSION_KEY } from '@greenborn/vue-side-menu'
   import AppTopbar from './AppTopbar.vue'

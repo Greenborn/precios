@@ -137,6 +137,33 @@ if [ "$INTERACTIVE_RUNAS" = "yes" ]; then
   RUN_AS="${ANS:-$DEFAULT_RUN_AS}"
 fi
 
+# ---------- bump de versión local (antes de desplegar) ----------
+# Igual que profesionales.top: +0.0.1 en front/ y back/, commit y push a la rama
+# antes de conectar por SSH, así el servidor hace pull de la versión ya bumpeada.
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+info "Verificando working tree local antes del bump de versión"
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+[ "$CURRENT_BRANCH" = "$GIT_BRANCH" ] \
+  || die "La rama local (${CURRENT_BRANCH}) no coincide con GIT_BRANCH (${GIT_BRANCH}); cambiá de rama antes de desplegar"
+[ -z "$(git -C "$REPO_ROOT" status --porcelain)" ] \
+  || die "Hay cambios sin commitear en ${REPO_ROOT}; commiteá o descartalos antes de desplegar"
+git -C "$REPO_ROOT" fetch origin "$GIT_BRANCH" || die "No se pudo hacer fetch de origin/${GIT_BRANCH}"
+[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" = "$(git -C "$REPO_ROOT" rev-parse "origin/${GIT_BRANCH}")" ] \
+  || die "La rama local ${GIT_BRANCH} no está sincronizada con origin/${GIT_BRANCH}; hacé pull/push antes de desplegar"
+
+info "Aplicando bump de versión (+0.0.1) en front/ y back/"
+(cd "$REPO_ROOT/front" && npm version patch --no-git-tag-version >/dev/null) || die "Falló el bump en front/"
+(cd "$REPO_ROOT/back" && npm version patch --no-git-tag-version >/dev/null) || die "Falló el bump en back/"
+FRONT_NEW_VERSION="$(node -p "require('${REPO_ROOT}/front/package.json').version")"
+BACKEND_NEW_VERSION="$(node -p "require('${REPO_ROOT}/back/package.json').version")"
+echo "  front -> ${FRONT_NEW_VERSION}"
+echo "  back  -> ${BACKEND_NEW_VERSION}"
+
+git -C "$REPO_ROOT" add front/package.json front/package-lock.json back/package.json back/package-lock.json
+git -C "$REPO_ROOT" commit -m "chore: bump de versión por deploy (front ${FRONT_NEW_VERSION}, back ${BACKEND_NEW_VERSION})" \
+  || die "Falló el commit del bump de versión"
+git -C "$REPO_ROOT" push origin "$GIT_BRANCH" || die "Falló el push del bump de versión a ${GIT_BRANCH}"
+
 # ---------- comando SSH ----------
 SSH_COMMON="-p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 if [ -n "$SSH_KEY" ]; then

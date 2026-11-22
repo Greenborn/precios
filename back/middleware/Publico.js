@@ -29,6 +29,7 @@ var paths = [
   { path: "/categorias/all", public: true },
   { path: "/categorias/get_empresas_categoria", public: true },
   { path: "/categorias/get_categoria_empresa", public: true },
+  { path: "/categorias/get_sub_categorias", public: true },
   { path: "/productos/all", public: true },
   { path: "/productos/importar", public: true },
   { path: "/productos/importar_alquiler", public: true },

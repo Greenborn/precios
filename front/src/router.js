@@ -22,9 +22,10 @@ export const routes = [
     meta: { requiere_sesion: true },
   },
   {
-    path: "/novedades",
-    name: "novedades",
-    component: () => import("./pages/Novedades.vue"),
+    path: "/mi-negocio",
+    name: "mi_negocio",
+    component: () => import("./pages/MiNegocio.vue"),
+    meta: { requiere_sesion: true },
   },
   {
     path: "/privacidad",

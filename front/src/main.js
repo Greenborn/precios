@@ -14,6 +14,7 @@ import { createApp, reactive } from "vue";
 import { getRouterConRutas } from './utils/auth'
 import { routerBeforeEach } from './utils/routes'
 import { router } from "./router";
+import { initPwa } from "./pwa";
 
 import Button from "./components/ui/Button.vue";
 import InputText from "./components/ui/InputText.vue";
@@ -70,7 +71,8 @@ async function init() {
   routerBeforeEach(router, storeApp)
   app.use(router)
   await router.isReady()
-  app.mount("#app")
+  app.mount("#app");
+  initPwa();
 }
 
 init()

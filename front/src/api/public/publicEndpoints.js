@@ -28,10 +28,6 @@ export function info_comercio( website ) {
   return request({ url: '/publico/busqueda/info_comercio?website='+encodeURI(website), method: 'get' })
 }
 
-export function public_news() {
-  return request({ url: '/public-news', method: 'get' })
-}
-
 export function get_estadistica(id) {
   return request({ url: '/publico/estadistica/data?id_estadistica='+id, method: 'get' })
 }

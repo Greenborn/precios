@@ -486,6 +486,79 @@ router.put('/cargar_precios_formulario', async function (req, res) {
     }
 })
 
+// Carga de precios del propio negocio (área privada /mi-negocio). A diferencia de
+// cargar_precios_formulario, el local se toma por id y debe pertenecer al usuario
+// autenticado. Devuelve el detalle por ítem (product_id) para adjuntar fotos.
+router.put('/cargar_precios_negocio', async function (req, res) {
+    try {
+        const usuario = req.session?.u_data
+        if (!usuario){
+            res.status(200).send({ stat: false, code: "DO_LOGIN", text: "No hay sesion activa" })
+            return
+        }
+
+        const BRANCH_ID = Number(req.body?.branch_id)
+        const local = Number.isInteger(BRANCH_ID) && BRANCH_ID > 0
+            ? await global.knex('branch').where({ id: BRANCH_ID }).first()
+            : null
+        if (!local || String(local.propietario_id) !== String(usuario.id)){
+            res.status(200).send({ stat: false, error: "El local no pertenece a tu cuenta" })
+            return
+        }
+
+        const PRODUCTOS = Array.isArray(req.body?.productos) ? req.body.productos.slice(0, 100) : []
+        if (PRODUCTOS.length == 0){
+            res.status(200).send({ stat: false, error: "Debe cargar al menos un producto" })
+            return
+        }
+
+        // Fecha "YYYY-MM-DD" al mediodía local (mismo criterio que cargar_precios_formulario)
+        let FECHA = new Date()
+        if (req.body?.fecha){
+            const solo_fecha = String(req.body.fecha).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+            FECHA = solo_fecha
+                ? new Date(Number(solo_fecha[1]), Number(solo_fecha[2]) - 1, Number(solo_fecha[3]), 12, 0, 0)
+                : new Date(req.body.fecha)
+        }
+        if (isNaN(FECHA.getTime()))
+            FECHA = new Date()
+
+        const detalle = []
+        for (let i = 0; i < PRODUCTOS.length; i++){
+            const item = PRODUCTOS[i]
+            const nombre_canonico = [item?.nombre, item?.marca, item?.presentacion]
+                .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+            const precio = Number(item?.precio)
+
+            if (!nombre_canonico || !precio || precio <= 0){
+                detalle.push({ indice: i, ok: false, error: "Nombre o precio inválido" })
+                continue
+            }
+
+            const producto = await resolver_producto_form(nombre_canonico, item?.marca)
+            if (!producto){
+                detalle.push({ indice: i, ok: false, error: "No se pudo registrar el producto" })
+                continue
+            }
+
+            const registro = await registrar_precio_usuario(
+                usuario, producto.id, BRANCH_ID, precio, FECHA,
+                "Precios del negocio - cargado desde el área privada"
+            )
+            detalle.push({ indice: i, ok: !!registro, product_id: producto.id, error: registro ? null : "No se pudo guardar el precio" })
+        }
+
+        const cargados = detalle.filter(d => d.ok).length
+        if (cargados == 0)
+            res.status(200).send({ stat: false, error: "No se pudo cargar ningún precio, verifique los datos e reintente", items: { cargados, con_error: detalle.length, detalle } })
+        else
+            res.status(200).send({ stat: true, items: { cargados, con_error: detalle.length - cargados, detalle } })
+    } catch (error) {
+        console.log("error al cargar precios del negocio", error)
+        res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
+    }
+})
+
 // Identificador único de cola (productos + ofertas)
 // cada item llevará un campo `tipo` para distinguir su procesamiento
 const idColaPrecios = "precios"  // cola unica; el tipo va en el item: 'producto', 'oferta', 'regenerar_precios'

@@ -20,6 +20,8 @@
   "homepage": "https://github.com/Greenborn/chat_publico_back#readme",
   "dependencies": {
     "@greenborn/express-greenborn-crud": "^0.4.0",
+    "@greenborn/express-greenborn-locales": "^0.1.0",
+    "@greenborn/express-greenborn-perfil": "^0.1.0",
     "@greenborn/express-greenborn-sso-back": "^1.11.0",
     "axios": "^1.18.1",
     "bcrypt": "^6.0.0",

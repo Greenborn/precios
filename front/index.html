@@ -28,12 +28,6 @@
       gtag('js', new Date());
 
       gtag('config', 'G-E6C2XNBM9N');
-      // Registrar service worker para PWA
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/service-worker.js');
-        });
-      }
     </script>
   </body>
 </html>
