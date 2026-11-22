@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import json
+import csv
 import re
 import requests
 import subprocess
@@ -61,7 +62,39 @@ ERRORES_PERMANENTES = (
     'no se pudo obtener/crear',
     'duplicada',
     'anterior a ayer',
+    # errores de integridad de la base (ej. branch_id inexistente): son del dato
+    '1452',
+    'foreign key constraint',
+    'cannot add or update a child row',
 )
+
+# CSV con un renglon por cada item descartado y el motivo (compartido con
+# back/routes/productos.js /importar)
+CSV_DESCARTADOS = os.getenv(
+    'CSV_DESCARTADOS',
+    os.path.join(os.path.dirname(__file__), 'logs', 'descartados.csv'))
+CSV_COLUMNAS = ('fecha', 'origen', 'tipo', 'nombre', 'branch_id', 'motivo')
+
+
+def registrar_descarte_csv(elemento, motivo, origen='worker'):
+    """Agrega un renglon al CSV de descartados. Nunca debe romper el worker."""
+    try:
+        os.makedirs(os.path.dirname(CSV_DESCARTADOS), exist_ok=True)
+        nuevo = not os.path.exists(CSV_DESCARTADOS) or os.path.getsize(CSV_DESCARTADOS) == 0
+        with open(CSV_DESCARTADOS, 'a', newline='', encoding='utf-8') as f:
+            w = csv.writer(f)
+            if nuevo:
+                w.writerow(CSV_COLUMNAS)
+            w.writerow([
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                origen,
+                elemento.get('tipo', ''),
+                elemento.get('name') or elemento.get('titulo') or '',
+                elemento.get('branch_id', ''),
+                (motivo or '').replace('\n', ' '),
+            ])
+    except Exception as e:
+        print(f"⚠ No se pudo escribir CSV de descartados: {e}")
 
 # Configuración de sincronización de cache en memoria del servidor API
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost')
@@ -982,6 +1015,7 @@ def main():
                         errores_total += 1
                         if es_error_permanente(motivo):
                             descartados_total += 1
+                            registrar_descarte_csv(elemento, motivo)
                             print(f"✗ Producto descartado, error permanente: {motivo}")
                         else:
                             fallo_transitorio = True
@@ -1006,6 +1040,7 @@ def main():
                         motivo = resultado.get('text', 'Error desconocido')
                         if es_error_permanente(motivo):
                             # oferta duplicada o anterior a ayer: descarte esperado
+                            registrar_descarte_csv(elemento, motivo)
                             print(f"⊘ Oferta descartada: {motivo}")
                         else:
                             errores_total += 1

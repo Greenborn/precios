@@ -5,6 +5,7 @@ module.exports = router
 const axios = require('axios')
 const { spawn } = require('child_process')
 const path = require('path')
+const fs = require('fs')
 const uuid = require('uuid')
 const busqueda_productos = require("../controllers/busqueda_productos")
 const sync_cache = require("../controllers/sync_cache")
@@ -791,6 +792,27 @@ router.post('/importar_alquiler', async function (req, res) {
     }
 })
 
+// Agrega al CSV compartido con el worker (extra_services/logs/descartados.csv)
+const CSV_DESCARTADOS = process.env.CSV_DESCARTADOS ||
+    path.join(__dirname, '..', '..', 'extra_services', 'logs', 'descartados.csv')
+function registrarDescartesCsv(rechazados) {
+    try {
+        fs.mkdirSync(path.dirname(CSV_DESCARTADOS), { recursive: true })
+        const esc = v => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`
+        let out = ''
+        if (!fs.existsSync(CSV_DESCARTADOS) || fs.statSync(CSV_DESCARTADOS).size === 0) {
+            out += 'fecha,origen,tipo,nombre,branch_id,motivo\n'
+        }
+        const fecha = new Date().toISOString().replace('T', ' ').slice(0, 19)
+        for (const { item, motivo } of rechazados) {
+            out += [fecha, 'importar', 'producto', item?.name || '', item?.branch_id || '', motivo].map(esc).join(',') + '\n'
+        }
+        fs.appendFileSync(CSV_DESCARTADOS, out)
+    } catch (e) {
+        console.log('[importar] no se pudo escribir CSV de descartados', e.message)
+    }
+}
+
 // Endpoint para importar productos y llenar la cola de procesamiento
 // El endpoint /importar utiliza el servicio externo de colas
 router.post('/importar', async function (req, res) {
@@ -815,16 +837,36 @@ router.post('/importar', async function (req, res) {
         console.log(`[importar] Enviando ${ARR_IMPORTA.length} productos al servicio de colas...`)
         console.log(`[importar] URL del servicio: ${QUEUE_SERVICE_URL}`)
 
+        // Validar que las sucursales existan: un branch_id inexistente rompe la FK
+        // de price_today y bloquea la cola del worker. Se rechaza y se deja en CSV.
+        const ids = [...new Set(ARR_IMPORTA.map(i => i && i.branch_id).filter(Boolean))]
+        const existentes = new Set(
+            ids.length ? (await global.knex('branch').whereIn('id', ids).select('id')).map(r => String(r.id)) : []
+        )
+        const rechazados = []
+        const validos = ARR_IMPORTA.filter(i => {
+            if (i && i.branch_id && existentes.has(String(i.branch_id))) return true
+            rechazados.push({
+                item: i,
+                motivo: i && i.branch_id ? `branch_id ${i.branch_id} no existe en branch` : 'branch_id es obligatorio'
+            })
+            return false
+        })
+        if (rechazados.length) {
+            registrarDescartesCsv(rechazados)
+            console.log(`[importar] ✗ ${rechazados.length} items rechazados por branch_id inválido`)
+        }
+
         // Agregar items a la cola externa (cola única)
         let agregados = 0;
-        for (const rawItem of ARR_IMPORTA) {
+        for (const rawItem of validos) {
             const item = { ...rawItem, tipo: 'producto' } // incluir tipo explícito
             const success = await agregarACola(idColaPrecios, item);
             if (success) agregados++;
         }
         
         console.log(`[importar] ✓ Completado: ${agregados}/${ARR_IMPORTA.length} productos enviados`);
-        res.status(200).send({ stat: true, count: agregados });
+        res.status(200).send({ stat: true, count: agregados, rechazados: rechazados.length });
         return;
     } catch (error) {
         console.log("[importar] error", error);
