@@ -25,6 +25,7 @@ const PI_TO_BI = {
   'pi-users': 'bi-people',
   'pi-tag': 'bi-tag',
   'pi-tags': 'bi-tags',
+  'pi-clock': 'bi-clock',
   'pi-chart-line': 'bi-graph-up',
   'pi-list': 'bi-list',
   'pi-table': 'bi-table',

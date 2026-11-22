@@ -9,6 +9,7 @@ export const referencias_componentes = {
   AbmPermisos: () => import('./admin/acceso/abmPermisos/AbmPermisos.vue'),
   AbmRutas: () => import('./admin/acceso/abmRutas/AbmRutas.vue'),
   AbmPreciosComunitarios: () => import('./admin/abmPrecios/AbmPreciosComunitarios.vue'),
+  AbmPreciosHoy: () => import('./admin/abmPreciosHoy/AbmPreciosHoy.vue'),
   AbmAliasProductos: () => import('./admin/abmAliasProductos/AbmAliasProductos.vue'),
   AbmCategorias: () => import('./admin/abmCategorias/AbmCategorias.vue'),
   AbmAliasCategorias: () => import('./admin/abmAliasCategorias/AbmAliasCategorias.vue'),
