@@ -772,7 +772,7 @@ X-API-Key: <api_key>
 
 ## 🔐 Administración y RBAC
 
-El módulo RBAC gestiona usuarios, roles, permisos y rutas del panel de administración. En esta etapa existe un único rol: **`administrador`**.
+El módulo RBAC gestiona usuarios, roles, permisos y rutas del panel de administración. Roles base: **`administrador`** (acceso total) y **`usuario`** (puede publicar precios; asignado por defecto a los usuarios creados vía SSO).
 
 ### Autenticación (JWT)
 
@@ -785,8 +785,10 @@ El módulo RBAC gestiona usuarios, roles, permisos y rutas del panel de administ
 
 #### Body
 ```json
-{ "email": "admin@admin.com", "password": "admin123" }
+{ "email": "usuario@dominio.com", "password": "una_contraseña_local" }
 ```
+
+> ℹ️ No existe una cuenta admin por defecto. El admin único (`ADMIN_EMAIL`) se crea al iniciar sesión vía SSO. Para habilitar el login local de un usuario (o crearle una contraseña), usá `back/scripts/set_password.sh` (ver [Contraseña local de usuarios](#contraseña-local-de-usuarios)).
 
 #### Respuesta Exitosa (200)
 ```json
@@ -996,6 +998,23 @@ Respuesta: `{ stat: true, data: { rows, fields_def, total, page, pageSize } }`.
 - **Formato**: Respuestas de listado usan el contrato del `TableEditor` (`rows` + `fields_def`).
 - **Roles base**: `administrador` (acceso total) y `usuario` (puede publicar precios vía formulario; rol por defecto de los usuarios creados vía SSO).
 - **Seed**: `scripts/seed_rbac.js` (idempotente) crea los roles, 20 permisos base, las rutas del panel y asegura el **admin único** (`ADMIN_EMAIL`, por defecto `lucho.2012.tandil@gmail.com`): remueve el rol `administrador` de cualquier otro usuario y lo asigna al admin único en su primer login SSO (`sso.js::asegurar_rol_admin`).
+
+#### Contraseña local de usuarios
+
+El seed RBAC **no crea cuentas con contraseña**: los usuarios creados vía SSO reciben una contraseña aleatoria inutilizable. Para habilitar el login local (`POST /admin/user/login`) de cualquier usuario, definí o restablecé su contraseña con:
+
+```bash
+# Actualiza la contraseña de un usuario existente (busca por email, case-insensitive)
+./back/scripts/set_password.sh usuario@dominio.com MiContraseña123
+
+# Si el usuario no existe, crearlo con el rol "usuario"
+./back/scripts/set_password.sh nuevo@dominio.com MiContraseña123 --crear
+
+# Sin pasar la contraseña como argumento, la pide de forma interactiva (oculta)
+./back/scripts/set_password.sh usuario@dominio.com
+```
+
+El script lee `back/.env`, hashea la contraseña con **bcrypt** (mismo esquema que el login local) y la guarda en `usuarios.pass`. Salidas: `0` éxito, `1` error de conexión/parámetros, `2` usuario inexistente (sin `--crear`).
 
 ### Tablas RBAC
 

@@ -89,6 +89,8 @@ back/
 │   ├── authorization.js
 │   └── processing.js
 ├── scripts/              # Scripts administrativos
+│   ├── seed_rbac.js      # Seed idempotente de roles/permisos/rutas/admin único
+│   ├── set_password.sh   # Define/restablece la contraseña local de un usuario
 │   ├── actualizar_price_today.js
 │   ├── unificar_productos.js
 │   └── ...
@@ -160,6 +162,24 @@ back/
 - Middleware: `middleware/Admin.js` y `middleware/Publico.js`
 - Roles: Usuario, Admin
 - Permisos granulares
+- Login local (email + contraseña bcrypt) y login vía SSO (Google)
+- No hay cuenta admin por defecto: el admin único (`ADMIN_EMAIL`) se crea en su primer login SSO
+
+### Contraseña local de usuarios
+Para habilitar o restablecer el login local de cualquier usuario:
+
+```bash
+# Usuario existente
+./back/scripts/set_password.sh usuario@dominio.com MiContraseña123
+
+# Crear el usuario (rol "usuario") si no existe
+./back/scripts/set_password.sh nuevo@dominio.com MiContraseña123 --crear
+
+# Sin contraseña como argumento: se pide de forma interactiva
+./back/scripts/set_password.sh usuario@dominio.com
+```
+
+Lee `back/.env`, hashea con bcrypt y actualiza `usuarios.pass`. Detalle: [Endpoints → Contraseña local de usuarios](./endpoints.md#contraseña-local-de-usuarios).
 
 ### Validaciones
 - Sanitización de datos de entrada

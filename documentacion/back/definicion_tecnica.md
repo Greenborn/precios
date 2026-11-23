@@ -52,7 +52,9 @@ back/
 │   ├── processing.js    (cola en memoria; sin uso tras la cola externa)
 │   └── utils.js         (funciones generales)
 ├── scripts/             # Scripts one-off y procesos
-│   └── actualizar_price_today.js (scheduler 24h)
+│   ├── actualizar_price_today.js (scheduler 24h)
+│   ├── seed_rbac.js     (roles/permisos/rutas y admin único)
+│   └── set_password.sh  (define la contraseña local de un usuario)
 ├── migrations/          # Migraciones de BD (Knex)
 │   ├── 20250722075112_init_schema.js
 │   └── ...
@@ -673,6 +675,22 @@ Para asegurar que los análisis y reportes reflejen únicamente los datos vigent
 
 **Referencia de implementación:**
 - Ver lógica en `back/routes/productos.js`, en los ciclos de procesamiento de productos y ofertas.
+
+## Definir la contraseña local de un usuario
+
+El seed RBAC (`scripts/seed_rbac.js`) no crea cuentas con contraseña. Los usuarios que se auto-registran vía SSO quedan con una contraseña aleatoria inutilizable, por lo que el login local (`POST /admin/user/login`) no funciona para ellos hasta definir una.
+
+**Script**: `scripts/set_password.sh`
+
+```bash
+./back/scripts/set_password.sh <email> [contraseña] [--crear]
+```
+
+- `--crear`: si el email no existe, crea el usuario con el rol `usuario`.
+- Sin contraseña como argumento, la pide de forma interactiva y oculta (con confirmación).
+- Busca el usuario por email case-insensitive (coincide con el `LOWER(email)` usado en login/SSO).
+- Hashea con bcrypt (10 rondas) y actualiza `usuarios.pass`; lee la conexión desde `back/.env` vía `knexfile.js`.
+- Códigos de salida: `0` éxito, `1` error de parámetros/conexión, `2` usuario inexistente sin `--crear`.
 
 ---
 

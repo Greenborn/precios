@@ -63,6 +63,8 @@ precios/
 
 ### 3. Documentación por Módulo
 
+> ℹ️ **Usuarios y contraseñas:** el sistema no trae una cuenta admin con contraseña. El admin único (`ADMIN_EMAIL`) se crea al iniciar sesión vía SSO. Para habilitar el login local de cualquier usuario: `./back/scripts/set_password.sh <email> [contraseña] [--crear]` (ver [Endpoints](./back/endpoints.md#contraseña-local-de-usuarios)).
+
 #### 🔧 Backend
 - **[README Backend](./back/README.md)**: Visión general del backend
 - **[Arquitectura](./back/arquitectura.md)**: Diseño arquitectónico y flujo de datos
