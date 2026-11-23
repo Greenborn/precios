@@ -42,8 +42,21 @@
               <Icon v-if="enlace.url" name="bi-box-arrow-up-right" class="small ms-1" />
             </a>
           </li>
+          <template v-if="isLogged">
+            <li class="d-lg-none pub-topbar__mobile-sep" role="separator"></li>
+            <li class="d-lg-none pub-topbar__mobile-user">{{ nombre_usuario }}</li>
+            <li class="d-lg-none">
+              <a href="#/mi-negocio" class="pub-topbar__link" @click.prevent="irMiNegocio('negocio')">Perfil Comercial</a>
+            </li>
+            <li v-if="esAdmin" class="d-lg-none">
+              <a href="#/admin/dashboard" class="pub-topbar__link" @click.prevent="irDashboard">Panel de administración</a>
+            </li>
+            <li class="d-lg-none">
+              <a href="#" class="pub-topbar__link text-danger" @click.prevent="cerrar_sesion">Cerrar sesión</a>
+            </li>
+          </template>
         </ul>
-        <div class="pub-topbar__account">
+        <div class="pub-topbar__account" :class="{ 'd-none d-lg-flex': isLogged }">
           <button v-if="!isLogged" class="btn btn-primary btn-sm" type="button" @click="irIngresar">
             <Icon name="bi-box-arrow-in-right" /> Ingresar
           </button>
@@ -270,6 +283,8 @@ onBeforeUnmount(()=>{
   &__account { display: flex; gap: .5rem; align-items: center;
     @media (max-width: 991.98px) { padding-top: var(--gb-space-3); border-top: 1px solid var(--gb-border); } }
   &__user { position: relative; }
+  &__mobile-sep { border-top: 1px solid var(--gb-border); margin: .5rem 0; }
+  &__mobile-user { padding: .25rem .75rem; font-weight: 600; color: var(--gb-heading); }
   &__dropdown {
     position: absolute; right: 0; top: calc(100% + 8px); z-index: 1040;
     min-width: 240px; padding: var(--gb-space-2);
