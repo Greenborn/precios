@@ -95,6 +95,10 @@ const sso = createSsoAuth({
   logger: { error: console.error, warn: console.warn, log: console.log },
 })
 
+// Alertas de login inválido hacia SGI (SSO_LOGIN_ALERTS_ENABLED / SGI_ALERTS_*). Desactivadas si no hay variables.
+const { createLoginAlerter, normalizeLoginAlertsConfig } = require('@greenborn/express-greenborn-sso-back')
+sso.loginAlerter = createLoginAlerter(normalizeLoginAlertsConfig(), { logger: { error: console.error } })
+
 module.exports = sso
 module.exports.ssoBaseUrl = ssoBaseUrl
 module.exports.asegurar_rol_admin = asegurar_rol_admin

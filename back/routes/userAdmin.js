@@ -38,6 +38,18 @@ router.get('/info', async function (req, res) {
   })
 })
 
+// Reporta el intento fallido a SGI (fire-and-forget, no bloquea la respuesta).
+function reportar_login_invalido(req, email) {
+  sso.loginAlerter.notify({
+    usuario_intentado: email,
+    ip: req.ip,
+    user_agent: req.get('user-agent'),
+    motivo: 'CREDENCIALES_INVALIDAS',
+    endpoint: req.originalUrl,
+    ocurrido_en: new Date().toISOString(),
+  })
+}
+
 // POST /login - autenticacion (publica)
 router.post('/login', async function (req, res) {
   const { email, password } = req.body || {}
@@ -45,10 +57,16 @@ router.post('/login', async function (req, res) {
 
   try {
     const usuario = await global.knex('usuarios').where({ email }).first()
-    if (!usuario) return responder_err(res, 'Credenciales inválidas')
+    if (!usuario) {
+      reportar_login_invalido(req, email)
+      return responder_err(res, 'Credenciales inválidas')
+    }
 
     const valida = await bcrypt.compare(password, usuario.pass)
-    if (!valida) return responder_err(res, 'Credenciales inválidas')
+    if (!valida) {
+      reportar_login_invalido(req, email)
+      return responder_err(res, 'Credenciales inválidas')
+    }
 
     const u_data = await cargar_usuario(usuario.id)
     const token = firmar_token({ id: usuario.id, email: usuario.email })
