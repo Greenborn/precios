@@ -5,7 +5,6 @@ const path = require('path')
 // (cada uno con su interruptor mostrar_<campo>, apagado por defecto).
 const CAMPOS_PERFIL = [
   { nombre: 'nombre_comercial', publicable: true, etiqueta: 'Nombre comercial' },
-  { nombre: 'telefono', publicable: true, etiqueta: 'Teléfono' },
   { nombre: 'sitio_web', publicable: true, etiqueta: 'Sitio web' },
   { nombre: 'descripcion', tipo: 'texto_largo', publicable: true, etiqueta: 'Descripción' },
 ]

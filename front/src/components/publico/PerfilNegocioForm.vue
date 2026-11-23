@@ -1,5 +1,5 @@
 <template>
-  <form novalidate @submit.prevent="guardar">
+  <form novalidate @submit.prevent>
     <div v-if="cargando" class="text-muted small mb-2" role="status">
       <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Cargando…
     </div>
@@ -28,14 +28,16 @@
       </div>
     </div>
 
-    <button type="submit" class="btn btn-primary mt-3" :disabled="guardando || !hayCambios">
-      <span v-if="guardando" class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-      {{ guardando ? 'Guardando…' : 'Guardar' }}
-    </button>
+    <div class="small text-muted mt-3" role="status" aria-live="polite">
+      <template v-if="guardando"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</template>
+      <template v-else-if="hayCambios">Cambios sin guardar…</template>
+      <template v-else>Los cambios se guardan automáticamente.</template>
+    </div>
   </form>
 </template>
 
 <script setup>
+import { watch, onBeforeUnmount } from 'vue'
 import { usePerfil } from '@greenborn/vue-greenborn-perfil'
 
 // Mismo comportamiento que PerfilEditor del paquete, con controles Bootstrap.
@@ -48,6 +50,31 @@ const props = defineProps({
 
 const { formulario, valores, cargando, guardando, error, mensaje, hayCambios, cargar, guardar } =
   usePerfil({ api: props.api, base: props.base, campos: props.campos, terminos: props.terminos })
+
+// Guardado automático con debounce: cada cambio reinicia el temporizador.
+const DEBOUNCE_MS = 800
+let temporizador = null
+
+async function guardarSiHayCambios() {
+  temporizador = null
+  if (guardando.value) return reprogramar()
+  if (hayCambios.value) {
+    await guardar()
+    // Si el usuario siguió editando durante el guardado, vuelve a guardar.
+    if (hayCambios.value && !error.value) reprogramar()
+  }
+}
+
+function reprogramar() {
+  clearTimeout(temporizador)
+  temporizador = setTimeout(guardarSiHayCambios, DEBOUNCE_MS)
+}
+
+watch(valores, () => { if (hayCambios.value) reprogramar() }, { deep: true })
+onBeforeUnmount(() => {
+  clearTimeout(temporizador)
+  if (hayCambios.value && !guardando.value) guardar()
+})
 
 cargar()
 </script>

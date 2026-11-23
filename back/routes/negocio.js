@@ -40,12 +40,22 @@ const perfilRepo = createKnexPerfilRepo({
 })
 // Los interruptores "mostrar_*" arrancan encendidos en perfiles nuevos
 const interruptores = normalizarCampos(cfg.CAMPOS_PERFIL).filter((c) => c.interruptor).map((c) => c.interruptor)
+// MySQL devuelve los tinyint como 1/0 y el paquete compara con `=== true`: se convierten a boolean.
+const comoBooleanos = (fila) => {
+  if (!fila) return fila
+  for (const i of interruptores) fila[i] = Boolean(fila[i])
+  return fila
+}
+for (const metodo of ['obtenerPorUsuario', 'obtenerPorId', 'actualizar']) {
+  const original = perfilRepo[metodo]
+  perfilRepo[metodo] = async (...args) => comoBooleanos(await original(...args))
+}
 perfilRepo.crear = async (userId) => {
   const [id] = await knex('perfiles').insert({
     usuario_id: userId,
     ...Object.fromEntries(interruptores.map((i) => [i, true])),
   })
-  return knex('perfiles').where({ id }).first()
+  return comoBooleanos(await knex('perfiles').where({ id }).first())
 }
 router.use('/perfil', createPerfilRouter({
   repo: perfilRepo,

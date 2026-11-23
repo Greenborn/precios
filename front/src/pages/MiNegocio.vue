@@ -201,7 +201,6 @@ import { AppStore } from '../stores/app'
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
 const CAMPOS_PERFIL = [
   { nombre: 'nombre_comercial', publicable: true, etiqueta: 'Nombre comercial' },
-  { nombre: 'telefono', publicable: true, etiqueta: 'Teléfono' },
   { nombre: 'sitio_web', publicable: true, etiqueta: 'Sitio web' },
   { nombre: 'descripcion', tipo: 'texto_largo', publicable: true, etiqueta: 'Descripción' },
 ]
