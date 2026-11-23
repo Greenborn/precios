@@ -11,6 +11,7 @@ const { createPerfilRouter, createKnexPerfilRepo, normalizarCampos } = require('
 const sesion = require('../middleware/SesionUsuario')
 const { createLocalesRepoBranch, createValidarLocalDuplicado } = require('../helpers/locales_branch')
 const cfg = require('../config/negocio')
+const contactos = require('../helpers/contactos')
 
 const router = express.Router()
 const knex = global.knex
@@ -31,13 +32,23 @@ router.use(createLocalesRouter({
 }))
 
 // ---------- Perfil del negocio ----------
+const perfilRepo = createKnexPerfilRepo({
+  db: knex,
+  table: 'perfiles',
+  userColumn: 'usuario_id',
+  campos: normalizarCampos(cfg.CAMPOS_PERFIL),
+})
+// Los interruptores "mostrar_*" arrancan encendidos en perfiles nuevos
+const interruptores = normalizarCampos(cfg.CAMPOS_PERFIL).filter((c) => c.interruptor).map((c) => c.interruptor)
+perfilRepo.crear = async (userId) => {
+  const [id] = await knex('perfiles').insert({
+    usuario_id: userId,
+    ...Object.fromEntries(interruptores.map((i) => [i, true])),
+  })
+  return knex('perfiles').where({ id }).first()
+}
 router.use('/perfil', createPerfilRouter({
-  repo: createKnexPerfilRepo({
-    db: knex,
-    table: 'perfiles',
-    userColumn: 'usuario_id',
-    campos: normalizarCampos(cfg.CAMPOS_PERFIL),
-  }),
+  repo: perfilRepo,
   auth: sesion,
   campos: cfg.CAMPOS_PERFIL,
   terminos: cfg.TERMINOS_NEGOCIO,
@@ -91,7 +102,7 @@ router.put('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
 
     const existe = await knex('perfiles').where({ usuario_id: req.user.id }).first('id')
     if (existe) await knex('perfiles').where({ usuario_id: req.user.id }).update({ [columna]: archivo })
-    else await knex('perfiles').insert({ usuario_id: req.user.id, [columna]: archivo })
+    else await knex('perfiles').insert({ usuario_id: req.user.id, [columna]: archivo, ...Object.fromEntries(interruptores.map((i) => [i, true])) })
 
     res.json({ url: url_perfil_img(archivo) })
   } catch (err) {
@@ -110,6 +121,83 @@ router.delete('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
   } catch (err) {
     console.error('[negocio] DELETE imagen perfil', err)
     res.status(500).json({ error: 'No se pudo quitar la imagen' })
+  }
+})
+
+// ---------- Medios de contacto ----------
+// GET /api/negocio/mi-perfil/contactos               -> { contactos } (todos, con visibilidad)
+// PUT /api/negocio/mi-perfil/contactos  { contactos } -> guarda y devuelve { contactos }
+// GET /api/negocio/publico/:perfilId/contactos       -> solo los marcados como visibles
+router.get('/negocio/mi-perfil/contactos', sesion, async (req, res) => {
+  try {
+    res.json({ contactos: await contactos.obtenerContactos(req.user.id) })
+  } catch (err) {
+    console.error('[negocio] GET contactos', err)
+    res.status(500).json({ error: 'No se pudieron obtener los datos de contacto' })
+  }
+})
+
+router.put('/negocio/mi-perfil/contactos', sesion, async (req, res) => {
+  try {
+    const r = contactos.validarContactos(req.body?.contactos)
+    if (r.error) return res.status(400).json({ error: r.error })
+    await contactos.guardarContactos(req.user.id, r)
+    res.json({ contactos: await contactos.obtenerContactos(req.user.id), message: 'Datos de contacto guardados' })
+  } catch (err) {
+    console.error('[negocio] PUT contactos', err)
+    res.status(500).json({ error: 'No se pudieron guardar los datos de contacto' })
+  }
+})
+
+router.get('/negocio/publico/:perfilId/contactos', async (req, res) => {
+  try {
+    const perfilId = Number(req.params.perfilId)
+    if (!Number.isInteger(perfilId) || perfilId <= 0) return res.status(400).json({ error: 'Identificador de negocio inválido' })
+    const perfil = await knex('perfiles').where({ id: perfilId }).first('usuario_id')
+    if (!perfil) return res.status(404).json({ error: 'negocio no encontrado' })
+    res.json({ contactos: await contactos.obtenerContactos(perfil.usuario_id, { soloVisibles: true }) })
+  } catch (err) {
+    console.error('[negocio] GET publico contactos', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// ---------- Eliminar los datos de la cuenta ----------
+// DELETE /api/negocio/mi-cuenta/datos
+// Borra perfil, imágenes, locales (con sus fotos de artículos) y todos los precios
+// (histórico y vigentes) cargados por el usuario. La cuenta de acceso no se elimina.
+router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
+  try {
+    const uid = req.user.id
+    const locales = await knex('branch').where({ propietario_id: uid }).select('id')
+    const ids = locales.map((l) => l.id)
+
+    await knex.transaction(async (trx) => {
+      await trx('price_today').where({ user_id: uid }).del()
+      await trx('price').where({ user_id: uid }).del()
+      if (ids.length) {
+        await trx('price_today').whereIn('branch_id', ids).del()
+        await trx('price').whereIn('branch_id', ids).del()
+      }
+      await trx('articulo_fotos').where({ user_id: uid }).del()
+      await trx('perfiles').where({ usuario_id: uid }).del()
+      await contactos.borrarContactosUsuario(uid, trx)
+    })
+
+    // Locales: reutiliza la baja del repositorio (fotos, comercio huérfano, caché de negocios)
+    for (const id of ids) {
+      for (const f of fs.existsSync(cfg.FOTOS_DIR) ? fs.readdirSync(cfg.FOTOS_DIR) : []) {
+        if (f.startsWith(`${id}_`)) fs.unlinkSync(path.join(cfg.FOTOS_DIR, f))
+      }
+      await localesRepo.eliminar(id)
+    }
+    borrar_img_perfil(`${uid}_portada.`)
+    borrar_img_perfil(`${uid}_foto.`)
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[negocio] DELETE datos de cuenta', err)
+    res.status(500).json({ error: 'No se pudieron eliminar los datos de la cuenta' })
   }
 })
 

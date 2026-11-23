@@ -88,3 +88,21 @@ export function quitar_imagen_perfil(tipo) {
 export function obtener_imagenes_publicas_negocio(perfilId) {
   return http.get(`/api/negocio/publico/${perfilId}/imagenes`).then((r) => r.data)
 }
+
+// Elimina perfil, locales, fotos y precios del usuario (la cuenta de acceso se conserva)
+export function eliminar_datos_cuenta() {
+  return http.delete('/api/negocio/mi-cuenta/datos').then((r) => r.data)
+}
+
+// Medios de contacto del negocio
+export function obtener_mis_contactos() {
+  return http.get('/api/negocio/mi-perfil/contactos').then((r) => r.data)
+}
+
+export function guardar_mis_contactos(contactos) {
+  return http.put('/api/negocio/mi-perfil/contactos', { contactos }).then((r) => r.data)
+}
+
+export function obtener_contactos_publicos_negocio(perfilId) {
+  return http.get(`/api/negocio/publico/${perfilId}/contactos`).then((r) => r.data)
+}

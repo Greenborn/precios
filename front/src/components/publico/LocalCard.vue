@@ -3,9 +3,6 @@
     <div class="card-body">
       <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
         <h3 class="h6 card-title mb-0">{{ nuevo ? 'Nuevo local' : (local.nombre || 'Local sin nombre') }}</h3>
-        <span v-if="!nuevo" class="badge" :class="form.publicado ? 'text-bg-success' : 'text-bg-secondary'">
-          {{ form.publicado ? 'Visible en el mapa' : 'Oculto' }}
-        </span>
       </div>
       <p v-if="!nuevo" class="small text-muted mb-3">Código: <code>{{ local.codigo || '—' }}</code></p>
       <p v-else class="small text-muted mb-3">Cada local nuevo recibe un código identificador. No se permiten locales duplicados (mismo nombre, dirección y ciudad).</p>
@@ -25,7 +22,7 @@
         </div>
         <div class="col-12">
           <label class="form-label" :for="id('ciudad')">Ciudad</label>
-          <input :id="id('ciudad')" v-model="form.ciudad" class="form-control" maxlength="80" autocomplete="off">
+          <input :id="id('ciudad')" value="Tandil" class="form-control" readonly aria-readonly="true">
         </div>
       </div>
 
@@ -50,15 +47,6 @@
         <div v-if="gpsError" class="alert alert-warning py-2 mt-2 mb-0">{{ gpsError }}</div>
       </div>
 
-      <div class="card bg-light border-0 mt-4">
-        <div class="card-body py-2">
-          <div class="form-check form-switch">
-            <input :id="id('publicado')" v-model="form.publicado" class="form-check-input" type="checkbox" role="switch">
-            <label class="form-check-label fw-semibold" :for="id('publicado')">Mostrar este local en el mapa público</label>
-          </div>
-          <p class="small text-muted mb-0 mt-1">Si está apagado, el local no aparece en tu ficha pública ni en el mapa.</p>
-        </div>
-      </div>
 
       <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
         <button v-if="!nuevo" type="button" class="btn btn-outline-danger btn-sm" :disabled="guardando" @click="$emit('eliminar')">
@@ -92,9 +80,9 @@ const nuevo = computed(() => !props.local)
 const uid = props.local?.id ?? 'nuevo'
 const id = (c) => `local-${uid}-${c}`
 
-const vacio = () => ({ nombre: '', calle: '', numero: '', ciudad: '', latitud: '', longitud: '', publicado: false })
+const vacio = () => ({ nombre: '', calle: '', numero: '', ciudad: 'Tandil', latitud: '', longitud: '', publicado: true })
 const desde = (l) => l ? {
-  nombre: l.nombre || '', calle: l.calle || '', numero: l.numero || '', ciudad: l.ciudad || '',
+  nombre: l.nombre || '', calle: l.calle || '', numero: l.numero || '', ciudad: 'Tandil',
   latitud: l.latitud ?? '', longitud: l.longitud ?? '', publicado: !!l.publicado,
 } : vacio()
 
@@ -147,10 +135,10 @@ function guardar() {
     nombre: f.nombre.trim(),
     calle: f.calle.trim() || null,
     numero: f.numero.trim() || null,
-    ciudad: f.ciudad.trim() || null,
+    ciudad: 'Tandil',
     latitud: coord(f.latitud),
     longitud: coord(f.longitud),
-    publicado: f.publicado,
+    publicado: true, // sin mapa público por ahora: los locales siempre quedan publicados
   }, () => { if (nuevo.value) form.value = vacio() })
 }
 </script>

@@ -15,6 +15,22 @@
 
       <template v-else>
         <CabeceraNegocio v-if="perfilId" :perfil-id="perfilId" :nombre="perfil?.nombre_comercial || 'Negocio'" class="mb-4" />
+        <!-- Compartir -->
+        <div v-if="perfil" class="d-flex flex-wrap align-items-center gap-2 mb-4" role="group" aria-label="Compartir esta ficha">
+          <span class="gb-text-muted small me-1"><Icon name="bi-share" /> Compartir:</span>
+          <button v-if="puedeCompartirNativo" type="button" class="btn btn-primary btn-sm" @click="compartir_nativo">
+            <Icon name="bi-share-fill" /> Compartir
+          </button>
+          <a class="btn btn-outline-success btn-sm" :href="url_whatsapp" target="_blank" rel="noopener">
+            <Icon name="bi-whatsapp" /> WhatsApp
+          </a>
+          <a class="btn btn-outline-primary btn-sm" :href="url_facebook" target="_blank" rel="noopener">
+            <Icon name="bi-facebook" /> Facebook
+          </a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" @click="copiar_enlace">
+            <Icon :name="copiado ? 'bi-check-lg' : 'bi-link-45deg'" /> {{ copiado ? 'Enlace copiado' : 'Copiar enlace' }}
+          </button>
+        </div>
         <!-- 1. Perfil -->
         <Card title="Perfil" icon="bi-person-vcard" class="mb-4">
           <EmptyState v-if="cargandoPerfil" size="sm" icon="bi-hourglass-split" title="Cargando perfil" />
@@ -25,6 +41,11 @@
             </template>
           </dl>
           <EmptyState v-else size="sm" icon="bi-person-vcard" title="Sin datos publicados" />
+        </Card>
+
+        <!-- Contacto -->
+        <Card v-if="contactos.length" title="Contacto" icon="bi-chat-dots" class="mb-4">
+          <ContactosPerfil :contactos="contactos" con-etiqueta />
         </Card>
 
         <!-- 2. Locales -->
@@ -78,6 +99,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
+import ContactosPerfil from '../components/publico/ContactosPerfil.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
 import { LocalesMapa } from '@greenborn/vue-greenborn-locales-mapa'
@@ -85,6 +107,7 @@ import '@greenborn/vue-greenborn-map-viewer/style.css'
 import {
   obtener_perfil_publico,
   listar_locales_publicos_negocio,
+  obtener_contactos_publicos_negocio,
   listar_productos_publicos_negocio,
   url_absoluta_backend,
 } from '../api/negocio'
@@ -106,6 +129,7 @@ const campos_visibles = computed(() =>
 const perfilId = ref(null)
 const perfil = ref(null)
 const locales = ref([])
+const contactos = ref([])
 const productos = ref({ total: 0, items: [] })
 const noEncontrado = ref(false)
 const errorPerfil = ref(false)
@@ -114,6 +138,30 @@ const cargandoLocales = ref(false)
 const cargandoProductos = ref(false)
 
 const url_foto = url_absoluta_backend
+
+// Compartir la ficha pública
+const copiado = ref(false)
+const puedeCompartirNativo = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+const titulo_compartir = computed(() => `${perfil.value?.nombre_comercial || 'Negocio'} en Precios de Tandil`)
+const url_ficha = () => window.location.href
+const url_whatsapp = computed(() => `https://wa.me/?text=${encodeURIComponent(`${titulo_compartir.value} ${route.fullPath && url_ficha()}`)}`)
+const url_facebook = computed(() => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url_ficha())}`)
+
+async function compartir_nativo() {
+  try {
+    await navigator.share({ title: titulo_compartir.value, url: url_ficha() })
+  } catch { /* el usuario canceló */ }
+}
+
+async function copiar_enlace() {
+  try {
+    await navigator.clipboard.writeText(url_ficha())
+    copiado.value = true
+    setTimeout(() => { copiado.value = false }, 2500)
+  } catch {
+    window.prompt('Copiá el enlace:', url_ficha())
+  }
+}
 
 function formatear_precio(valor) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(Number(valor))
@@ -144,6 +192,7 @@ async function cargar_ficha(id) {
   errorPerfil.value = false
   perfil.value = null
   locales.value = []
+  contactos.value = []
   productos.value = { total: 0, items: [] }
   cargandoPerfil.value = true
   let datos
@@ -159,6 +208,10 @@ async function cargar_ficha(id) {
   if (id !== perfilId.value) return
   perfil.value = datos
   cargandoPerfil.value = false
+
+  obtener_contactos_publicos_negocio(id)
+    .then((r) => { if (id === perfilId.value) contactos.value = r.contactos || [] })
+    .catch(() => {})
 
   cargandoLocales.value = true
   listar_locales_publicos_negocio(id)

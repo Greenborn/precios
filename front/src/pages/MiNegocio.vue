@@ -32,6 +32,15 @@
       <Card id="seccion-perfil" title="Perfil del negocio" icon="bi-person-vcard" class="mb-4">
         <CabeceraNegocio editable class="mb-4" />
         <PerfilNegocioForm :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
+        <hr class="my-4">
+        <ContactosForm />
+        <hr class="my-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <small class="gb-text-muted">Elimina tu perfil, locales, fotos y todos los precios que cargaste. No se puede deshacer.</small>
+          <button type="button" class="btn btn-outline-danger btn-sm" @click="eliminar_cuenta">
+            <i class="bi bi-trash me-1" aria-hidden="true"></i>Eliminar los datos de mi cuenta
+          </button>
+        </div>
       </Card>
 
       <!-- 2. Locales -->
@@ -182,10 +191,11 @@ import LocalCard from '../components/publico/LocalCard.vue'
 import RecorteModal from '../components/publico/RecorteModal.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
+import ContactosForm from '../components/publico/ContactosForm.vue'
 import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
+import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios, eliminar_datos_cuenta } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -317,6 +327,22 @@ async function guardar_local(local, datos) {
   } finally {
     guardando_id.value = null
   }
+}
+
+function eliminar_cuenta() {
+  storeApp.mostrar_confirm({
+    title: 'Eliminar los datos de la cuenta',
+    text: 'Se borrarán tu perfil, tus locales, las fotos y todos los precios que cargaste, incluido el histórico. Esta acción no se puede deshacer. ¿Continuar?',
+    severity_confirmar: 'danger',
+    confirmar_accion: async () => {
+      try {
+        await eliminar_datos_cuenta()
+        window.location.reload()
+      } catch (err) {
+        storeApp.mostrar_alerta(mensaje_error(err, 'No se pudieron eliminar los datos de la cuenta'))
+      }
+    },
+  })
 }
 
 function eliminar_local(local) {
