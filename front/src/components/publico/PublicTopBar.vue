@@ -45,9 +45,6 @@
           <template v-if="isLogged">
             <li class="d-lg-none pub-topbar__mobile-sep" role="separator"></li>
             <li class="d-lg-none pub-topbar__mobile-user">{{ nombre_usuario }}</li>
-            <li class="d-lg-none">
-              <a href="#/mi-negocio" class="pub-topbar__link" @click.prevent="irMiNegocio('negocio')">Perfil Comercial</a>
-            </li>
             <li v-if="esAdmin" class="d-lg-none">
               <a href="#/admin/dashboard" class="pub-topbar__link" @click.prevent="irDashboard">Panel de administración</a>
             </li>
@@ -70,9 +67,6 @@
                 <div class="pub-topbar__dd-name">{{ nombre_usuario }}</div>
                 <div v-if="storeApp.userInfo?.email" class="pub-topbar__dd-mail">{{ storeApp.userInfo.email }}</div>
               </div>
-              <button type="button" class="pub-topbar__dd-item" role="menuitem" @click="irMiNegocio('negocio')">
-                <Icon name="bi-shop-window" /> Perfil Comercial
-              </button>
               <button v-if="esAdmin" type="button" class="pub-topbar__dd-item" role="menuitem" @click="irDashboard">
                 <Icon name="bi-speedometer2" /> Panel de administración
               </button>

@@ -15,6 +15,5 @@
 const accesos = [
   { to: '/ofertas', icon: 'bi-lightning-charge', title: 'Ofertas', desc: 'Promociones vigentes agrupadas por comercio.' },
   { to: '/carga_precio', icon: 'bi-cloud-upload', title: 'Carga comunitaria', desc: 'Sumá los precios que viste en tu compra.' },
-  { to: '/ayuda/negocios', icon: 'bi-shop-window', title: '¿Tenés un negocio?', desc: 'Cargá los precios de tu comercio. Te explicamos cómo, ingresando con tu cuenta de Google.' },
 ]
 </script>
