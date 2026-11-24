@@ -186,6 +186,75 @@ exports.busqueda = async function( termino, limit = -1 ) {
     }))
 }
 
+// Palabras vacías comunes en español: no aportan a la búsqueda y se descartan
+const PALABRAS_VACIAS = new Set(['de','del','el','la','los','las','un','una','unos','unas',
+  'y','o','u','e','a','al','en','con','sin','por','para','su','sus','lo','que','se'])
+const MAX_PALABRAS_BUSQUEDA = 5
+
+// Divide el término en palabras normalizadas, sin repetir, sin vacías y con tope.
+// Si tras filtrar no queda ninguna, se usan las palabras del término completo.
+function tokenizar(termino) {
+    const unicas = [...new Set(normalizar(termino).split(' ').filter(p => p.length > 0))]
+    if (unicas.length === 0) return []
+    const sin_vacias = unicas.filter(p => !PALABRAS_VACIAS.has(p))
+    const base = sin_vacias.length > 0 ? sin_vacias : unicas
+    return base.slice(0, MAX_PALABRAS_BUSQUEDA)
+}
+exports.tokenizar = tokenizar
+
+function precio_num(e) {
+    const p = Number(e.price)
+    // -1 = precio no disponible: va al final, igual que en ordenar() del router
+    return Number.isFinite(p) && p !== -1 ? p : Infinity
+}
+
+// Ranking de la búsqueda de productos:
+//  1) grupo: 1 = contiene TODAS las palabras (AND), 2 = contiene alguna (OR)
+//  2) cantidad de palabras coincidentes, descendente
+//  3) precio según `orden` ('precio_desc' desc; resto asc; 'relevancia' asc)
+//  4) desempate fijo (nombre, product_id, branch_id, date_time) para paginar sin repetir ni saltar
+// Cada registro aparece una sola vez: el grupo 2 excluye lo que ya está en el grupo 1.
+exports.busqueda_ranking = function( termino, orden ) {
+    const palabras = tokenizar(termino)
+    if (palabras.length === 0) return []
+    const np = palabras.length
+    const encontrados = []
+    const todo = lista()
+    for (let i = 0; i < todo.length; i++) {
+        const e = todo[i]
+        let n = 0
+        for (let w = 0; w < np; w++) if (e.nameLower.includes(palabras[w])) n++
+        if (n === 0) continue
+        encontrados.push({ e, n, grupo: n === np ? 1 : 2 })
+    }
+    const f = orden === 'precio_desc' ? -1 : 1
+    encontrados.sort((a, b) => {
+        if (a.grupo !== b.grupo) return a.grupo - b.grupo
+        if (a.n !== b.n) return b.n - a.n
+        const pa = precio_num(a.e), pb = precio_num(b.e)
+        if (pa !== pb) return pa === Infinity ? 1 : pb === Infinity ? -1 : (pa - pb) * f
+        return (a.e.nameLower < b.e.nameLower ? -1 : a.e.nameLower > b.e.nameLower ? 1 : 0)
+            || String(a.e.product_id).localeCompare(String(b.e.product_id))
+            || String(a.e.branch_id).localeCompare(String(b.e.branch_id))
+            || String(a.e.date_time).localeCompare(String(b.e.date_time))
+    })
+    return encontrados.map(({ e, n, grupo }) => ({
+        'id':e.id,
+        'name':e.name,
+        'price':e.price,
+        'branch_id':e.branch_id,
+        'product_id':e.product_id,
+        'date_time':e.date_time,
+        'time':e.time,
+        'url':e.url,
+        'user_id':e.user_id,
+        'user_nombre':e.user_nombre,
+        'user_apellido':e.user_apellido,
+        'grupo': grupo,
+        'coincidencias': n
+    }))
+}
+
 // Sugerencias de autocompletado: nombres distintos que contienen todas las palabras
 // del término. Primero los que empiezan con el término, luego los demás (por largo).
 exports.sugerencias = function( termino, limit = 8 ) {

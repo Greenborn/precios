@@ -6,11 +6,12 @@ const fs = require("fs")
 const busqueda_productos = require("../controllers/busqueda_productos")
 const utils = require("../helpers/utils")
 
-async function hacer_busqueda( termino, metodo ){
+// Orden por grupo (todas las palabras / alguna), cantidad de coincidencias y precio
+async function hacer_busqueda( termino, orden ){
   return new Promise(async (resolve, reject) => {
     try{
 
-      let productos = await busqueda_productos.busqueda(termino, 200)      
+      let productos = await busqueda_productos.busqueda_ranking(termino, orden)
 
       if (productos){
 
@@ -208,10 +209,11 @@ router.get('/precios', async function (req, res) {
                                     message: `El término debe tener al menos ${LIMITE_MIN_CARACTERES} caracteres` })
 
     const es_alquiler = product_name.search("alquiler") > -1
+    // Productos: hacer_busqueda ya devuelve el ranking final (no se reordena por precio)
     let res_busqueda = es_alquiler
       ? await hacer_busqueda_alquiler( product_name, 'AND' )
-      : await hacer_busqueda( product_name, 'AND' )
-    res_busqueda = ordenar(res_busqueda || [], req.query.orden)
+      : await hacer_busqueda( product_name, req.query.orden )
+    res_busqueda = res_busqueda || []
 
     const resultado = paginar(res_busqueda, req.query)
     if (!es_alquiler) enriquecer(resultado.items)
