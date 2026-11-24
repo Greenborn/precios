@@ -62,6 +62,7 @@
 <script setup>
 import { computed } from 'vue'
 import { formatMoney } from '../../helpers/formatter'
+import { resaltarTerminos } from '../../helpers/resaltarTerminos'
 import VariacionPrecio from './VariacionPrecio.vue'
 
 const props = defineProps({
@@ -76,10 +77,5 @@ const esCorregible = computed(() => props.resultado?.tipo != 'ALQUILER' && props
 // Solo se muestra si la API lo envía (no todos los endpoints lo incluyen)
 const variacion = computed(() => props.resultado?.porcentaje_aumento ?? props.resultado?.variacion ?? null)
 
-function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
-const nombreResaltado = computed(() => {
-  const texto = props.resultado?.name
-  if (!props.termino || typeof texto !== 'string') return texto
-  return texto.replace(new RegExp(`(${escapeRegex(props.termino)})`, 'ig'), '<mark>$1</mark>')
-})
+const nombreResaltado = computed(() => resaltarTerminos(props.resultado?.name, props.termino))
 </script>
