@@ -16,6 +16,7 @@
     "@greenborn/vue-greenborn-map-viewer": "^1.3.1",
     "@greenborn/vue-greenborn-modal-manager": "^1.7.1",
     "@greenborn/vue-greenborn-perfil": "^0.1.0",
+    "@greenborn/vue-greenborn-reporte-contextual": "^0.1.9",
     "@greenborn/vue-greenborn-tree-view": "^1.0.0",
     "@greenborn/vue-side-menu": "^1.1.3",
     "@greenborn/vue-table-editor": "^1.4.9",
