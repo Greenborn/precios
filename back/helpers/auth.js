@@ -56,6 +56,7 @@ async function cargar_usuario(usuario_id) {
     name: usuario.name,
     apellido: usuario.apellido || null,
     email: usuario.email,
+    es_negocio: Boolean(usuario.es_negocio),
     roles: roles.map(r => r.nombre),
     permisos: permisos.map(p => p.nombre),
     rutas,

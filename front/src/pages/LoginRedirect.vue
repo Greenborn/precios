@@ -59,8 +59,11 @@ async function procesar_callback() {
     if (login_req.stat) {
       setUserInfo('admin', storeApp, login_req.data.u_data, router, login_req.data.token)
       storeApp.loading = false
-      // Volver a la ruta original (p.ej. /carga_precio) si se guardó antes del SSO
-      const destino = route.query.redirect || getRedirectAfterLogin() || '/admin/dashboard'
+      // Un usuario recién registrado va directo a su configuración
+      // Si no, volver a la ruta original (p.ej. /carga_precio) guardada antes del SSO
+      const destino = login_req.data.es_nuevo
+        ? '/mi-configuracion'
+        : route.query.redirect || getRedirectAfterLogin() || '/admin/dashboard'
       limpiarRedirectAfterLogin()
       router.replace(destino)
       return

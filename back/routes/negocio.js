@@ -9,6 +9,14 @@ const path = require('path')
 const { createLocalesRouter } = require('@greenborn/express-greenborn-locales')
 const { createPerfilRouter, createKnexPerfilRepo, normalizarCampos } = require('@greenborn/express-greenborn-perfil')
 const sesion = require('../middleware/SesionUsuario')
+// Área de negocio: además de la sesión, el usuario debe estar marcado como negocio
+const sesion_negocio = (req, res, next) => sesion(req, res, (err) => {
+  if (err) return next(err)
+  if (!req.session?.u_data?.es_negocio) {
+    return res.status(403).json({ error: "Tu cuenta no está configurada como negocio", code: "NO_NEGOCIO" })
+  }
+  next()
+})
 const { createLocalesRepoBranch, createValidarLocalDuplicado } = require('../helpers/locales_branch')
 const cfg = require('../config/negocio')
 const contactos = require('../helpers/contactos')
@@ -21,11 +29,11 @@ const validarDuplicado = createValidarLocalDuplicado(knex)
 const localesRepo = createLocalesRepoBranch(knex)
 
 // Alta y edición pasan por el control de duplicados antes del router del paquete
-router.post('/mis-locales', sesion, validarDuplicado)
-router.put('/mis-locales/:id', sesion, validarDuplicado)
+router.post('/mis-locales', sesion_negocio, validarDuplicado)
+router.put('/mis-locales/:id', sesion_negocio, validarDuplicado)
 router.use(createLocalesRouter({
   repo: localesRepo,
-  auth: sesion,
+  auth: sesion_negocio,
   camposExtra: cfg.CAMPOS_LOCALES_EXTRA,
   terminos: cfg.TERMINOS_LOCAL,
   propietarioColumn: 'propietario_id',
@@ -59,7 +67,7 @@ perfilRepo.crear = async (userId) => {
 }
 router.use('/perfil', createPerfilRouter({
   repo: perfilRepo,
-  auth: sesion,
+  auth: sesion_negocio,
   campos: cfg.CAMPOS_PERFIL,
   terminos: cfg.TERMINOS_NEGOCIO,
 }))
@@ -81,7 +89,7 @@ function borrar_img_perfil(prefijo) {
   }
 }
 
-router.get('/negocio/mi-perfil/imagenes', sesion, async (req, res) => {
+router.get('/negocio/mi-perfil/imagenes', sesion_negocio, async (req, res) => {
   try {
     const p = await knex('perfiles').where({ usuario_id: req.user.id }).first('portada_archivo', 'foto_archivo')
     res.json({ portada_url: url_perfil_img(p?.portada_archivo), foto_url: url_perfil_img(p?.foto_archivo) })
@@ -91,7 +99,7 @@ router.get('/negocio/mi-perfil/imagenes', sesion, async (req, res) => {
   }
 })
 
-router.put('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
+router.put('/negocio/mi-perfil/imagen/:tipo', sesion_negocio, async (req, res) => {
   try {
     const columna = TIPOS_IMG_PERFIL[req.params.tipo]
     if (!columna) return res.status(400).json({ error: 'Tipo de imagen inválido' })
@@ -121,7 +129,7 @@ router.put('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
   }
 })
 
-router.delete('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
+router.delete('/negocio/mi-perfil/imagen/:tipo', sesion_negocio, async (req, res) => {
   try {
     const columna = TIPOS_IMG_PERFIL[req.params.tipo]
     if (!columna) return res.status(400).json({ error: 'Tipo de imagen inválido' })
@@ -138,7 +146,7 @@ router.delete('/negocio/mi-perfil/imagen/:tipo', sesion, async (req, res) => {
 // GET /api/negocio/mi-perfil/contactos               -> { contactos } (todos, con visibilidad)
 // PUT /api/negocio/mi-perfil/contactos  { contactos } -> guarda y devuelve { contactos }
 // GET /api/negocio/publico/:perfilId/contactos       -> solo los marcados como visibles
-router.get('/negocio/mi-perfil/contactos', sesion, async (req, res) => {
+router.get('/negocio/mi-perfil/contactos', sesion_negocio, async (req, res) => {
   try {
     res.json({ contactos: await contactos.obtenerContactos(req.user.id) })
   } catch (err) {
@@ -147,7 +155,7 @@ router.get('/negocio/mi-perfil/contactos', sesion, async (req, res) => {
   }
 })
 
-router.put('/negocio/mi-perfil/contactos', sesion, async (req, res) => {
+router.put('/negocio/mi-perfil/contactos', sesion_negocio, async (req, res) => {
   try {
     const r = contactos.validarContactos(req.body?.contactos)
     if (r.error) return res.status(400).json({ error: r.error })
@@ -250,7 +258,7 @@ async function localPropio(req, res) {
   return { branchId, local }
 }
 
-router.get('/negocio/locales/:branchId/fotos', sesion, async (req, res) => {
+router.get('/negocio/locales/:branchId/fotos', sesion_negocio, async (req, res) => {
   try {
     const propio = await localPropio(req, res)
     if (!propio) return
@@ -262,7 +270,7 @@ router.get('/negocio/locales/:branchId/fotos', sesion, async (req, res) => {
   }
 })
 
-router.put('/negocio/locales/:branchId/articulos/:productId/foto', sesion, async (req, res) => {
+router.put('/negocio/locales/:branchId/articulos/:productId/foto', sesion_negocio, async (req, res) => {
   try {
     const propio = await localPropio(req, res)
     if (!propio) return
@@ -300,7 +308,7 @@ router.put('/negocio/locales/:branchId/articulos/:productId/foto', sesion, async
   }
 })
 
-router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion, async (req, res) => {
+router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion_negocio, async (req, res) => {
   try {
     const propio = await localPropio(req, res)
     if (!propio) return
@@ -318,7 +326,7 @@ router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion, as
 
 // ---------- Mis precios (listado privado) ----------
 //   GET /api/negocio/mis-precios?limit&offset -> último precio por producto y local propios
-router.get('/negocio/mis-precios', sesion, async (req, res) => {
+router.get('/negocio/mis-precios', sesion_negocio, async (req, res) => {
   try {
     const locales = await knex('branch').where({ propietario_id: req.user.id }).orderBy('id').select('id', 'branch_name')
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200)

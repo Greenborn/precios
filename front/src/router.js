@@ -28,6 +28,12 @@ export const routes = [
     meta: { requiere_sesion: true },
   },
   {
+    path: "/mi-configuracion",
+    name: "mi_configuracion",
+    component: () => import("./pages/MiConfiguracion.vue"),
+    meta: { requiere_sesion: true },
+  },
+  {
     path: "/negocio/:id",
     name: "ficha_negocio",
     component: () => import("./pages/FichaNegocio.vue"),

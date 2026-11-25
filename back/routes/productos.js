@@ -498,6 +498,10 @@ router.put('/cargar_precios_negocio', async function (req, res) {
             res.status(200).send({ stat: false, code: "DO_LOGIN", text: "No hay sesion activa" })
             return
         }
+        if (!usuario.es_negocio){
+            res.status(200).send({ stat: false, code: "NO_NEGOCIO", text: "Tu cuenta no está configurada como negocio" })
+            return
+        }
 
         const BRANCH_ID = Number(req.body?.branch_id)
         const local = Number.isInteger(BRANCH_ID) && BRANCH_ID > 0

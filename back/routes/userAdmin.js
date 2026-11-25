@@ -33,6 +33,7 @@ router.get('/info', async function (req, res) {
     name: usuario.name,
     apellido: usuario.apellido || null,
     email: usuario.email,
+    es_negocio: Boolean(usuario.es_negocio),
     rutas: usuario.rutas || [],
     permisos: usuario.permisos || [],
   })
@@ -78,6 +79,7 @@ router.post('/login', async function (req, res) {
         name: u_data.name,
         apellido: u_data.apellido || null,
         email: u_data.email,
+        es_negocio: u_data.es_negocio,
         rutas: u_data.rutas,
       },
     })
@@ -103,6 +105,12 @@ router.post('/sso_login', async function (req, res) {
     const sso_user = response.data.data.user
     if (!sso_user?.email) return responder_err(res, 'El SSO no devolvió email de usuario', 'DO_LOGIN')
 
+    // Si el email todavía no existe localmente, el usuario se registra en este login
+    const existente = await global.knex('usuarios')
+      .whereRaw('LOWER(email) = ?', [String(sso_user.email).toLowerCase()])
+      .first()
+    const es_nuevo = !existente
+
     const usuario = await sso.syncSsoUser(sso_user)
     if (!usuario) return responder_err(res, 'No se pudo obtener/crear el usuario', 'DO_LOGIN')
 
@@ -116,11 +124,13 @@ router.post('/sso_login', async function (req, res) {
 
     responder_ok(res, {
       token: token_local,
+      es_nuevo,
       u_data: {
         id: u_data.id,
         name: u_data.name,
         apellido: u_data.apellido || null,
         email: u_data.email,
+        es_negocio: u_data.es_negocio,
         rutas: u_data.rutas,
       },
     })
@@ -153,7 +163,7 @@ router.put('/guardar_config', async function (req, res) {
   const usuario = req.session && req.session.u_data ? req.session.u_data : null
   if (!usuario) return responder_err(res, 'No hay sesion activa', 'DO_LOGIN')
 
-  const { id, name, apellido, email, pass } = req.body || {}
+  const { id, name, apellido, email, pass, es_negocio } = req.body || {}
 
   if (id && Number(id) !== usuario.id) return responder_err(res, 'No autorizado')
 
@@ -161,6 +171,7 @@ router.put('/guardar_config', async function (req, res) {
   if (name) actualizar.name = name
   if (apellido !== undefined) actualizar.apellido = apellido
   if (email) actualizar.email = email
+  if (es_negocio !== undefined) actualizar.es_negocio = Boolean(es_negocio)
   if (pass && pass !== '********') {
     actualizar.pass = await bcrypt.hash(pass, 10)
   }

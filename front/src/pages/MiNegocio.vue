@@ -13,6 +13,11 @@
         </template>
       </PageHeader>
 
+      <div v-if="no_es_negocio" class="alert alert-warning d-flex align-items-center gap-2" role="status">
+        <Icon name="bi-info-circle" />
+        <span class="flex-grow-1">Tu cuenta no está configurada como negocio. Activalo en <router-link to="/mi-configuracion">Mi configuración</router-link> para usar esta sección.</span>
+      </div>
+
       <div v-if="mensajeExito" class="alert alert-success d-flex align-items-center gap-2" role="status">
         <Icon name="bi-check-circle-fill" /> <span class="flex-grow-1">{{ mensajeExito }}</span>
         <button type="button" class="btn-close" aria-label="Cerrar" @click="mensajeExito = ''"></button>
@@ -284,6 +289,8 @@ const locales_con_precios = computed(() => {
   for (const p of mis_precios.value) m.set(p.local_id, { id: p.local_id, nombre: p.local || 'Sin nombre' })
   return [...m.values()]
 })
+
+const no_es_negocio = computed(() => storeApp.userInfo?.es_negocio === false)
 
 const perfil_id = ref(null)
 onMounted(async () => {
