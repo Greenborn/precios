@@ -70,15 +70,26 @@
           <div class="row g-3 mb-3">
             <div class="col-12 col-md-7">
               <label for="precio_local" class="form-label fw-semibold">Local <span class="text-danger" aria-hidden="true">*</span></label>
-              <select id="precio_local" class="form-select" v-model="local_precios" required>
+              <select id="precio_local" class="form-select" v-model="local_precios"
+                      :class="{ 'is-invalid': err('local') }" :aria-invalid="err('local') ? 'true' : 'false'"
+                      :aria-describedby="err('local') ? 'err_local' : null"
+                      @change="tocar('local')" @blur="tocar('local')">
                 <option :value="null" disabled>Elegí un local</option>
                 <option v-for="l in locales" :key="l.id" :value="l.id">{{ l.nombre || 'Sin nombre' }}</option>
+                <option :value="SIN_LOCAL">Sin local</option>
               </select>
-              <small v-if="!locales.length" class="form-text gb-text-muted">Primero agregá un local en la pestaña «Mi negocio».</small>
+              <div v-if="err('local')" id="err_local" class="invalid-feedback d-block">{{ err('local') }}</div>
+              <small v-else class="form-text gb-text-muted">
+                «Sin local» guarda los precios en un local propio que se crea la primera vez.
+              </small>
             </div>
             <div class="col-12 col-md-5">
               <label for="precio_fecha" class="form-label fw-semibold">Fecha</label>
-              <input id="precio_fecha" type="date" class="form-control" v-model="fecha_precios">
+              <input id="precio_fecha" type="date" class="form-control" v-model="fecha_precios"
+                     :class="{ 'is-invalid': err('fecha') }" :aria-invalid="err('fecha') ? 'true' : 'false'"
+                     :aria-describedby="err('fecha') ? 'err_fecha' : null"
+                     @input="tocar('fecha')" @blur="tocar('fecha')">
+              <div v-if="err('fecha')" id="err_fecha" class="invalid-feedback d-block">{{ err('fecha') }}</div>
             </div>
           </div>
 
@@ -86,28 +97,47 @@
             <span class="producto-row__num gb-num" aria-hidden="true">{{ index + 1 }}</span>
             <div class="row g-2 flex-grow-1">
               <div class="col-12 col-sm-6 col-lg-3">
-                <label :for="'p_nombre' + index" class="form-label small mb-1">Artículo</label>
-                <input :id="'p_nombre' + index" type="text" class="form-control" v-model="fila.nombre" placeholder="Arroz">
+                <label :for="'p_nombre' + index" class="form-label small mb-1">Artículo <span class="text-danger" aria-hidden="true">*</span></label>
+                <input :id="'p_nombre' + index" type="text" class="form-control" v-model="fila.nombre" placeholder="Arroz" maxlength="200"
+                       :class="{ 'is-invalid': err(clave(index, 'nombre')) }" :aria-invalid="err(clave(index, 'nombre')) ? 'true' : 'false'"
+                       :aria-describedby="err(clave(index, 'nombre')) ? 'err_nombre_' + index : null"
+                       @input="tocar(clave(index, 'nombre'))" @blur="tocar(clave(index, 'nombre'))">
+                <div v-if="err(clave(index, 'nombre'))" :id="'err_nombre_' + index" class="invalid-feedback d-block">{{ err(clave(index, 'nombre')) }}</div>
               </div>
-              <div class="col-6 col-lg-2">
+              <div class="col-12 col-sm-6 col-lg-2">
                 <label :for="'p_marca' + index" class="form-label small mb-1">Marca</label>
-                <input :id="'p_marca' + index" type="text" class="form-control" v-model="fila.marca" placeholder="Marolio">
+                <input :id="'p_marca' + index" type="text" class="form-control" v-model="fila.marca" placeholder="Marolio" maxlength="100"
+                       :class="{ 'is-invalid': err(clave(index, 'marca')) }" :aria-invalid="err(clave(index, 'marca')) ? 'true' : 'false'"
+                       :aria-describedby="err(clave(index, 'marca')) ? 'err_marca_' + index : null"
+                       @input="tocar(clave(index, 'marca'))" @blur="tocar(clave(index, 'marca'))">
+                <div v-if="err(clave(index, 'marca'))" :id="'err_marca_' + index" class="invalid-feedback d-block">{{ err(clave(index, 'marca')) }}</div>
               </div>
-              <div class="col-6 col-lg-2">
+              <div class="col-12 col-sm-6 col-lg-2">
                 <label :for="'p_pres' + index" class="form-label small mb-1">Presentación</label>
-                <input :id="'p_pres' + index" type="text" class="form-control" v-model="fila.presentacion" placeholder="1Kg">
+                <input :id="'p_pres' + index" type="text" class="form-control" v-model="fila.presentacion" placeholder="1Kg" maxlength="100"
+                       :class="{ 'is-invalid': err(clave(index, 'presentacion')) }" :aria-invalid="err(clave(index, 'presentacion')) ? 'true' : 'false'"
+                       :aria-describedby="err(clave(index, 'presentacion')) ? 'err_pres_' + index : null"
+                       @input="tocar(clave(index, 'presentacion'))" @blur="tocar(clave(index, 'presentacion'))">
+                <div v-if="err(clave(index, 'presentacion'))" :id="'err_pres_' + index" class="invalid-feedback d-block">{{ err(clave(index, 'presentacion')) }}</div>
               </div>
-              <div class="col-6 col-lg-2">
-                <label :for="'p_precio' + index" class="form-label small mb-1">Precio</label>
+              <div class="col-12 col-sm-6 col-lg-2">
+                <label :for="'p_precio' + index" class="form-label small mb-1">Precio <span class="text-danger" aria-hidden="true">*</span></label>
                 <div class="input-group">
                   <span class="input-group-text">$</span>
-                  <input :id="'p_precio' + index" type="text" inputmode="decimal" class="form-control gb-num" v-model="fila.precio" placeholder="1000">
+                  <input :id="'p_precio' + index" type="text" inputmode="decimal" class="form-control gb-num" v-model="fila.precio" placeholder="1000"
+                         :class="{ 'is-invalid': err(clave(index, 'precio')) }" :aria-invalid="err(clave(index, 'precio')) ? 'true' : 'false'"
+                         :aria-describedby="err(clave(index, 'precio')) ? 'err_precio_' + index : null"
+                         @input="tocar(clave(index, 'precio'))" @blur="tocar(clave(index, 'precio'))">
                 </div>
+                <div v-if="err(clave(index, 'precio'))" :id="'err_precio_' + index" class="invalid-feedback d-block">{{ err(clave(index, 'precio')) }}</div>
               </div>
-              <div class="col-6 col-lg-3">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label :for="'p_foto' + index" class="form-label small mb-1">Foto (opcional, una por artículo)</label>
                 <input :id="'p_foto' + index" type="file" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp"
-                       @change="elegir_foto(fila, $event)">
+                       :class="{ 'is-invalid': err(clave(index, 'foto')) }" :aria-invalid="err(clave(index, 'foto')) ? 'true' : 'false'"
+                       :aria-describedby="err(clave(index, 'foto')) ? 'err_foto_' + index : null"
+                       @change="tocar(clave(index, 'foto')); elegir_foto(fila, $event)">
+                <div v-if="err(clave(index, 'foto'))" :id="'err_foto_' + index" class="invalid-feedback d-block">{{ err(clave(index, 'foto')) }}</div>
                 <div v-if="fila.foto" class="d-flex align-items-center gap-2 mt-1">
                   <img :src="fila.foto.dataUrl" alt="Foto encuadrada" class="rounded" width="48" height="48" style="object-fit:cover">
                   <small class="form-text gb-text-muted m-0">Se reemplaza la foto previa del artículo</small>
@@ -118,6 +148,7 @@
             <Button variant="ghost" severity="danger" icon="bi-trash" :ariaLabel="'Quitar artículo ' + (index + 1)" @click="quitar_fila(index)" />
           </div>
 
+          <div v-if="err('productos')" id="err_productos" class="invalid-feedback d-block mt-2">{{ err('productos') }}</div>
           <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
             <Button variant="outline" icon="bi-plus-lg" label="Agregar artículo" @click="agregar_fila()" />
             <Button type="submit" icon="bi-send" label="Enviar precios" :loading="enviandoPrecios" />
@@ -175,13 +206,16 @@
     </div>
   </main>
 
+  <input ref="input_cambio_foto" type="file" class="d-none" accept="image/jpeg,image/png,image/webp" aria-hidden="true" tabindex="-1"
+         @change="cambiar_foto_pendiente($event)">
   <RecorteModal :archivo="foto_pendiente.archivo" :ancho="800" :alto="800" titulo="Encuadrar foto del artículo"
-                texto-aceptar="Usar esta foto" @aceptar="aceptar_recorte" @cancelar="foto_pendiente = { fila: null, archivo: null }" />
+                texto-aceptar="Usar esta foto" @aceptar="aceptar_recorte" @cancelar="foto_pendiente = { fila: null, archivo: null }"
+                @cambiar="abrir_selector_cambio" />
   <PublicFooter />
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
 import LocalResumen from '../components/publico/LocalResumen.vue'
@@ -193,7 +227,7 @@ import ContactosForm from '../components/publico/ContactosForm.vue'
 import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
+import { http, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -206,6 +240,8 @@ const TERMINOS_NEGOCIO = { singular: 'negocio', plural: 'negocios' }
 const TERMINOS_LOCAL = { singular: 'local', plural: 'locales' }
 const FOTO_MAX_BYTES = 2 * 1024 * 1024
 const FOTO_TIPOS = ['image/jpeg', 'image/png', 'image/webp']
+// Valor del select de local para cargar precios sin un local elegido (el back crea/reutiliza el local propio)
+const SIN_LOCAL = 'sin_local'
 
 const storeApp = AppStore()
 const { locales, cargando, cargar, crear, actualizar, eliminar } = useLocales({ api: http, base: '/api' })
@@ -215,7 +251,7 @@ const mensajeExito = ref('')
 const enviandoPrecios = ref(false)
 const local_precios = ref(null)
 const fecha_precios = ref(new Date().toISOString().split('T')[0])
-const filas_vacia = () => ({ nombre: '', marca: '', presentacion: '', precio: '', foto: null })
+const filas_vacia = () => ({ nombre: '', marca: '', presentacion: '', precio: '', foto: null, error_foto: '' })
 const filas = ref([filas_vacia()])
 
 function mensaje_error(err, por_defecto = 'Ocurrió un error, reintente luego') {
@@ -354,135 +390,235 @@ function agregar_fila() {
 
 function quitar_fila(index) {
   filas.value.splice(index, 1)
+  // Las claves por posición dejan de corresponder: se descartan los estados de las filas
+  for (const k of Object.keys(tocados)) if (k.startsWith('fila-')) delete tocados[k]
+  errores_servidor.value = {}
 }
 
 // Foto del artículo en curso de encuadre (el archivo se recorta a 800x800 antes de adjuntarse)
 const foto_pendiente = ref({ fila: null, archivo: null })
 
 function aceptar_recorte(dataUrl) {
-  if (foto_pendiente.value.fila) foto_pendiente.value.fila.foto = { dataUrl }
+  if (foto_pendiente.value.fila) {
+    foto_pendiente.value.fila.foto = { dataUrl }
+    foto_pendiente.value.fila.error_foto = ''
+  }
   foto_pendiente.value = { fila: null, archivo: null }
 }
 
+// Validación compartida de la foto (elegida o tomada con cámara): tipo y tamaño.
+// Devuelve el mensaje de error, o null si el archivo es válido.
+function validar_foto(archivo) {
+  if (!FOTO_TIPOS.includes(archivo.type)) return 'La foto debe ser JPG, PNG o WEBP'
+  if (archivo.size > FOTO_MAX_BYTES) return 'La foto supera el máximo de 2 MB'
+  return null
+}
+
+// Pone un archivo de foto en el recorte para la fila indicada. Devuelve false si no pasó la validación.
+function encuadrar_foto(fila, archivo) {
+  const error = validar_foto(archivo)
+  if (error) {
+    fila.error_foto = error
+    return false
+  }
+  fila.error_foto = ''
+  foto_pendiente.value = { fila, archivo }
+  return true
+}
+
 function elegir_foto(fila, evento) {
+  fila.error_foto = ''
   const archivo = evento.target.files?.[0] || null
+  evento.target.value = ''
   if (!archivo) {
     fila.foto = null
     return
   }
-  if (!FOTO_TIPOS.includes(archivo.type)) {
-    storeApp.mostrar_alerta('La foto debe ser JPG, PNG o WEBP')
-    evento.target.value = ''
-    fila.foto = null
-    return
-  }
-  if (archivo.size > FOTO_MAX_BYTES) {
-    storeApp.mostrar_alerta('La foto supera el máximo de 2 MB')
-    evento.target.value = ''
-    fila.foto = null
-    return
-  }
   fila.foto = null
-  foto_pendiente.value = { fila, archivo }
+  encuadrar_foto(fila, archivo)
+}
+
+// Botón "Cambiar foto" del recorte: abre el selector (cámara sólo en móvil, D7) para la misma fila
+const input_cambio_foto = ref(null)
+const es_movil = () => window.matchMedia('(max-width: 575.98px)').matches
+
+function abrir_selector_cambio() {
+  const input = input_cambio_foto.value
+  if (!input) return
+  if (es_movil()) input.setAttribute('capture', 'environment')
+  else input.removeAttribute('capture')
+  input.click()
+}
+
+function cambiar_foto_pendiente(evento) {
+  const archivo = evento.target.files?.[0] || null
   evento.target.value = ''
+  if (!archivo || !foto_pendiente.value.fila) return
+  encuadrar_foto(foto_pendiente.value.fila, archivo)
 }
 
-const numero_precio = (valor) => Number(String(valor ?? '').replace(',', '.'))
+// ---- Validación de la carga de precios (mismas reglas que el back, ver validar_carga_precios_negocio)
+const LIMITE_NOMBRE = 200
+const LIMITE_MARCA = 100
+const LIMITE_PRESENTACION = 100
+const PRECIO_MAXIMO = 999999999
 
-// Motivo por el que una fila no se puede enviar (null si está bien)
-function motivo_fila(f) {
-  const nombre = String(f.nombre || '').trim()
-  const tienePrecio = String(f.precio ?? '').trim() !== ''
-  if (!nombre && !tienePrecio) return null // fila vacía: se ignora
-  if (!nombre) return 'falta el nombre del artículo'
-  if (!tienePrecio) return 'falta el precio'
-  if (!(numero_precio(f.precio) > 0)) return 'el precio debe ser un número mayor a 0'
-  return null
+const fila_vacia = (f) => !String(f.nombre || '').trim() && !String(f.marca || '').trim()
+  && !String(f.presentacion || '').trim() && String(f.precio ?? '').trim() === '' && !f.foto
+
+// "YYYY-MM-DD" que existe en el calendario (rechaza p. ej. 2026-02-31)
+function fecha_valida(texto) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto)
+  if (!m) return false
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])
+}
+const numero_precio = (valor) => Number(String(valor ?? '').trim().replace(',', '.'))
+const clave = (index, campo) => `fila-${index}-${campo}`
+
+// Errores del formulario: clave -> mensaje. Claves: 'local', 'fecha', 'productos', 'fila-<i>-<campo>'
+const errores_locales = computed(() => {
+  const e = {}
+  if (!local_precios.value) e.local = 'Elegí un local o «Sin local»'
+  const f = String(fecha_precios.value || '')
+  if (!f) e.fecha = 'Indicá la fecha de los precios'
+  else if (!fecha_valida(f)) e.fecha = 'La fecha no es válida'
+
+  let hay_datos = false
+  filas.value.forEach((fila, i) => {
+    if (fila.error_foto) e[clave(i, 'foto')] = fila.error_foto
+    if (fila_vacia(fila)) return
+    const nombre = String(fila.nombre || '').trim()
+    const marca = String(fila.marca || '').trim()
+    const presentacion = String(fila.presentacion || '').trim()
+    const precio = String(fila.precio ?? '').trim()
+    hay_datos = true
+    if (!nombre) e[clave(i, 'nombre')] = 'El nombre del artículo es obligatorio'
+    else if (nombre.length > LIMITE_NOMBRE) e[clave(i, 'nombre')] = `El nombre no puede superar los ${LIMITE_NOMBRE} caracteres`
+    if (marca.length > LIMITE_MARCA) e[clave(i, 'marca')] = `La marca no puede superar los ${LIMITE_MARCA} caracteres`
+    if (presentacion.length > LIMITE_PRESENTACION) e[clave(i, 'presentacion')] = `La presentación no puede superar los ${LIMITE_PRESENTACION} caracteres`
+    if (precio === '') e[clave(i, 'precio')] = 'El precio es obligatorio'
+    else {
+      const n = numero_precio(precio)
+      if (!Number.isFinite(n)) e[clave(i, 'precio')] = 'El precio debe ser un número'
+      else if (n <= 0) e[clave(i, 'precio')] = 'El precio debe ser mayor a 0'
+      else if (n > PRECIO_MAXIMO) e[clave(i, 'precio')] = 'El precio es demasiado alto'
+    }
+  })
+  if (!hay_datos) e.productos = 'Cargá al menos un artículo con nombre y precio'
+  return e
+})
+
+// Errores que llegan del back o de un envío fallido (se limpian al tocar el campo)
+const errores_servidor = ref({})
+// Campos tocados (escritos o desenfocados): sólo ellos muestran el error antes de enviar
+const tocados = reactive({})
+const intento_envio = ref(false)
+
+function tocar(key) {
+  tocados[key] = true
+  if (errores_servidor.value[key]) delete errores_servidor.value[key]
+}
+function err(key) {
+  if (!intento_envio.value && !tocados[key]) return ''
+  return errores_servidor.value[key] || errores_locales.value[key] || ''
+}
+function limpiar_tocados() {
+  for (const k of Object.keys(tocados)) delete tocados[k]
+}
+const ID_CAMPO = { local: 'precio_local', fecha: 'precio_fecha' }
+const ID_CAMPO_FILA = { nombre: 'p_nombre', marca: 'p_marca', presentacion: 'p_pres', precio: 'p_precio', foto: 'p_foto' }
+function enfocar(key) {
+  const m = /^fila-(\d+)-(\w+)$/.exec(key || '')
+  const id = m ? ID_CAMPO_FILA[m[2]] + m[1] : ID_CAMPO[key]
+  if (id) nextTick(() => document.getElementById(id)?.focus())
 }
 
-// Arma un texto corto con las filas que fallaron: "Fila 2 (Arroz): falta el precio; ..."
-const MAX_FILAS_EN_ALERTA = 5
-function texto_filas_con_error(entradas) {
-  const partes = entradas.slice(0, MAX_FILAS_EN_ALERTA).map((e) => `Fila ${e.fila}${e.nombre ? ` (${e.nombre})` : ''}: ${e.motivo}`)
-  if (entradas.length > MAX_FILAS_EN_ALERTA) partes.push(`y ${entradas.length - MAX_FILAS_EN_ALERTA} más`)
-  return partes.join('; ')
+// Envío de la carga. Se usa `http` (axios): el error llega como excepción con err.response.data,
+// que es lo que leen mensaje_error y los errores por campo.
+async function enviar_carga_precios(cuerpo) {
+  const { data } = await http.put('/publico/productos/cargar_precios_negocio', cuerpo)
+  return data
 }
 
 async function enviar_precios() {
-  if (!local_precios.value) {
-    storeApp.mostrar_alerta('Debe elegir un local')
+  intento_envio.value = true
+  errores_servidor.value = {}
+  const claves = Object.keys(errores_locales.value)
+  if (claves.length) {
+    storeApp.mostrar_alerta('Revisá los campos marcados en rojo')
+    enfocar(claves[0])
     return
   }
-  // Antes de enviar se avisa qué fila está mal y por qué (no se descarta en silencio)
-  const con_problemas = filas.value
-    .map((f, i) => ({ fila: i + 1, nombre: String(f.nombre || '').trim(), motivo: motivo_fila(f) }))
-    .filter((e) => e.motivo)
-  if (con_problemas.length) {
-    storeApp.mostrar_alerta(`No se enviaron los precios. Corregí: ${texto_filas_con_error(con_problemas)}`)
-    return
-  }
-  // origen[k] = posición de la fila en el formulario de la fila k enviada
-  const origen = filas.value.map((_, i) => i).filter((i) => motivo_fila(filas.value[i]) === null && String(filas.value[i].nombre || '').trim())
+
+  // origen[k] = posición en el formulario de la fila k enviada
+  const origen = filas.value.map((_, i) => i).filter((i) => !fila_vacia(filas.value[i]))
   const validos = origen.map((i) => filas.value[i])
-  if (!validos.length) {
-    storeApp.mostrar_alerta('Debe cargar al menos un artículo con nombre y precio')
-    return
+  const cuerpo = {
+    ...(local_precios.value === SIN_LOCAL ? { sin_local: true } : { branch_id: local_precios.value }),
+    fecha: fecha_precios.value,
+    productos: validos.map((f) => ({
+      nombre: f.nombre.trim(),
+      marca: f.marca.trim(),
+      presentacion: f.presentacion.trim(),
+      precio: numero_precio(f.precio),
+    })),
   }
 
   enviandoPrecios.value = true
   try {
-    const res = await cargar_precios_negocio({
-      branch_id: local_precios.value,
-      fecha: fecha_precios.value,
-      productos: validos.map((f) => ({
-        nombre: f.nombre.trim(),
-        marca: f.marca.trim(),
-        presentacion: f.presentacion.trim(),
-        precio: Number(String(f.precio).replace(',', '.')),
-      })),
-    })
-    // Filas rechazadas por el back, con su número de fila del formulario y el motivo
-    const errores = (res?.items?.detalle || [])
-      .filter((d) => !d.ok)
-      .map((d) => ({
-        fila: origen[d.indice] + 1,
-        nombre: String(validos[d.indice]?.nombre || '').trim(),
-        motivo: d.error || 'no se pudo guardar',
-      }))
-
-    if (res?.error || !res?.items) {
-      const base = res?.error || res?.text || 'No se pudieron cargar los precios'
-      storeApp.mostrar_alerta(errores.length ? `${base}. ${texto_filas_con_error(errores)}` : base)
+    const res = await enviar_carga_precios(cuerpo)
+    if (!res?.items) {
+      storeApp.mostrar_alerta(res?.error || 'No se pudieron cargar los precios')
       return
     }
+    const items = res.items
+    const detalle = items.detalle || []
+    // Filas rechazadas por el back: posición en el formulario y motivo
+    const motivo_por_origen = new Map()
+    for (const d of detalle) if (!d.ok) motivo_por_origen.set(origen[d.indice], d.error || 'no se pudo guardar')
 
-    // Una foto opcional por artículo: se adjunta al artículo ya registrado (product_id)
+    // Una foto opcional por artículo: se adjunta al artículo ya registrado (product_id) en el local usado
+    const branch = items.branch_id ?? local_precios.value
     let fotos_ok = 0
     let fotos_err = 0
-    for (const d of res.items.detalle || []) {
+    for (const d of detalle) {
       const archivo = validos[d.indice]?.foto
       if (!d.ok || !archivo) continue
       try {
-        await guardar_foto_articulo(local_precios.value, d.product_id, archivo.dataUrl)
+        await guardar_foto_articulo(branch, d.product_id, archivo.dataUrl)
         fotos_ok++
       } catch {
         fotos_err++
       }
     }
 
-    let texto = `Se cargaron ${res.items.cargados} precio(s)`
-    if (res.items.con_error) texto += ` (${res.items.con_error} con error)`
+    let texto = `Se cargaron ${items.cargados} precio(s)`
+    if (items.con_error) texto += ` (${items.con_error} con error)`
     if (fotos_ok) texto += `. Fotos guardadas: ${fotos_ok}`
     if (fotos_err) texto += `. Fotos con error: ${fotos_err}`
     mensajeExito.value = texto
-    // Las filas que fallaron quedan en el formulario para corregirlas y reenviarlas
-    const fallidas = new Set((res.items.detalle || []).filter((d) => !d.ok).map((d) => origen[d.indice]))
-    const pendientes = filas.value.filter((_, i) => fallidas.has(i))
-    filas.value = pendientes.length ? pendientes : [filas_vacia()]
-    if (errores.length) storeApp.mostrar_alerta(`Algunas filas no se cargaron: ${texto_filas_con_error(errores)}`)
+
+    // Las filas que fallaron quedan en el formulario, con el motivo en el campo Artículo
+    const pendientes = origen.filter((i) => motivo_por_origen.has(i))
+    filas.value = pendientes.length ? pendientes.map((i) => filas.value[i]) : [filas_vacia()]
+    pendientes.forEach((oi, j) => { errores_servidor.value[clave(j, 'nombre')] = motivo_por_origen.get(oi) })
+    if (pendientes.length) storeApp.mostrar_alerta(`Algunas filas no se cargaron: ${pendientes.map((oi) => `Fila ${oi + 1}: ${motivo_por_origen.get(oi)}`).join('; ')}`)
+    intento_envio.value = false
+    limpiar_tocados()
     cargar_mis_precios(true)
   } catch (err) {
-    storeApp.mostrar_alerta(mensaje_error(err, 'Error al enviar los precios'))
+    const datos = err?.response?.data
+    if (Array.isArray(datos?.errores) && datos.errores.length) {
+      for (const e of datos.errores) {
+        const key = e.fila ? clave(origen[e.fila - 1] ?? 0, e.campo) : e.campo
+        errores_servidor.value[key] = e.mensaje
+      }
+      storeApp.mostrar_alerta('Revisá los campos marcados en rojo')
+      enfocar(Object.keys(errores_servidor.value)[0])
+    } else {
+      storeApp.mostrar_alerta(mensaje_error(err, 'Error al enviar los precios'))
+    }
   } finally {
     enviandoPrecios.value = false
   }

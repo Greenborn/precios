@@ -95,3 +95,35 @@ exports.construir_categorias = async function () {
 
     return true
 }
+
+// Agrega la relacion producto-categoria a products_category_diccio, usando los
+// precios ya cargados en precios_diccio (sin consultar la DB).
+exports.vincular_producto_categoria = function (product_id, category_id) {
+    const pid = String(product_id)
+    const cid = String(category_id)
+    const pc = global.products_category_diccio
+
+    if (!pc.by_product_id[pid]) pc.by_product_id[pid] = []
+    if (!pc.by_product_id[pid].some(c => String(c) === cid)) pc.by_product_id[pid].push(category_id)
+
+    if (!pc.by_category_id[cid]) pc.by_category_id[cid] = []
+    const arr = pc.by_category_id[cid]
+    for (const row of global.precios_diccio[pid] || []) {
+        const item = normalizar_item(row)
+        const idx = arr.findIndex(e => mismo_producto_sucursal(e, item))
+        if (idx !== -1) arr.splice(idx, 1)
+        arr.push(item)
+    }
+}
+
+// Quita la relacion producto-categoria de products_category_diccio.
+exports.desvincular_producto_categoria = function (product_id, category_id) {
+    const pid = String(product_id)
+    const cid = String(category_id)
+    const pc = global.products_category_diccio
+
+    if (pc.by_product_id[pid])
+        pc.by_product_id[pid] = pc.by_product_id[pid].filter(c => String(c) !== cid)
+    if (pc.by_category_id[cid])
+        pc.by_category_id[cid] = pc.by_category_id[cid].filter(e => String(e.product_id) !== pid)
+}

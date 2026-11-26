@@ -43,9 +43,51 @@ function aColumnas(datos = {}) {
   if ('ciudad' in datos) cols.city = datos.ciudad || null
   if ('latitud' in datos) cols.latitude = datos.latitud ?? null
   if ('longitud' in datos) cols.longitude = datos.longitud ?? null
-  if ('publicado' in datos) cols.publicado = !!datos.publicado
+  // `publicado` no se toca desde los endpoints del usuario (siempre true al crear; sólo admin lo cambia)
   if ('propietario_id' in datos) cols.propietario_id = datos.propietario_id
   return cols
+}
+
+// Local "sin local" del usuario: se crea una sola vez (branch con sin_local = 1 y su enterprice)
+// y se reutiliza en envíos posteriores. Nombre = nombre comercial del perfil o, si no está
+// definido, el nombre de usuario. No es un local publicable (publicado = false).
+async function obtener_o_crear_local_sin_local(knex, usuario) {
+  const buscar = () => knex('branch').where({ propietario_id: usuario.id, sin_local: 1 }).first()
+  const existente = await buscar()
+  if (existente) return existente
+
+  const perfil = await knex('perfiles').where({ usuario_id: usuario.id }).first('nombre_comercial')
+  const nombre_usuario = [usuario.name, usuario.apellido].filter(Boolean).join(' ').trim()
+  const nombre = (String(perfil?.nombre_comercial || '').trim() || nombre_usuario || `Usuario ${usuario.id}`).slice(0, 200)
+
+  let codigo = null
+  for (let i = 0; i < 10 && !codigo; i++) {
+    const candidato = generar_codigo()
+    if (!(await knex('branch').where({ codigo: candidato }).first())) codigo = candidato
+  }
+  if (!codigo) throw new Error('No se pudo generar un código de local único')
+
+  try {
+    const id = await knex.transaction(async (trx) => {
+      const [enterpriseId] = await trx('enterprice').insert({ name: nombre, active: true })
+      const [nuevoId] = await trx('branch').insert({
+        branch_name: nombre,
+        enterprise_id: Number(enterpriseId),
+        propietario_id: usuario.id,
+        codigo,
+        publicado: false,
+        sin_local: 1,
+      })
+      return Number(nuevoId)
+    })
+    precios_negocio.marcar(id, true)
+    return await knex('branch').where({ id }).first()
+  } catch (error) {
+    // Carrera con otro envío simultáneo: si ya quedó creado, se usa ese
+    const ya_creado = await buscar()
+    if (ya_creado) return ya_creado
+    throw error
+  }
 }
 
 function createLocalesRepoBranch(knex) {
@@ -62,7 +104,8 @@ function createLocalesRepoBranch(knex) {
 
   return {
     async listarPorPropietario(userId) {
-      const filas = await base().where({ propietario_id: userId }).orderBy('id')
+      // El local "sin local" (sin_local = 1) no aparece en la lista de locales del usuario
+      const filas = await base().where({ propietario_id: userId }).whereNull('sin_local').orderBy('id')
       return filas.map(aPaquete)
     },
     async obtener(id) {
@@ -80,7 +123,7 @@ function createLocalesRepoBranch(knex) {
           ...cols,
           enterprise_id: Number(enterpriseId),
           codigo,
-          publicado: !!cols.publicado,
+          publicado: true,
         })
         return Number(id)
       })
@@ -116,7 +159,8 @@ function createLocalesRepoBranch(knex) {
       })
     },
     async listarPublicados({ ciudad } = {}) {
-      const q = base().where({ publicado: true }).orderBy('id')
+      // D3: todos los locales se publican; el local interno "sin local" nunca se lista
+      const q = base().whereNull('sin_local').orderBy('id')
       if (ciudad) q.where('city', ciudad)
       return (await q).map(aPaquete)
     },
@@ -170,4 +214,4 @@ function createValidarLocalDuplicado(knex) {
   }
 }
 
-module.exports = { createLocalesRepoBranch, createValidarLocalDuplicado, aPaquete, generar_codigo }
+module.exports = { createLocalesRepoBranch, createValidarLocalDuplicado, aPaquete, generar_codigo, obtener_o_crear_local_sin_local }

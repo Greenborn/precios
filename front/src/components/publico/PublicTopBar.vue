@@ -25,6 +25,22 @@
           <Icon name="bi-funnel" /> Filtrar
         </button>
 
+        <div ref="tamano_ref" class="pub-topbar__tamano">
+          <button ref="btn_tamano_ref" class="pub-topbar__toggler" type="button" aria-label="Tamaño del texto"
+                  aria-controls="pubTamano" :aria-expanded="panel_tamano ? 'true' : 'false'" @click="panel_tamano = !panel_tamano">
+            <Icon name="bi-fonts" />
+          </button>
+          <div v-if="panel_tamano" id="pubTamano" class="pub-topbar__dropdown pub-topbar__tamano-panel" role="group" aria-label="Tamaño del texto">
+            <div class="pub-topbar__dd-head"><div class="pub-topbar__dd-name">Tamaño del texto</div></div>
+            <button v-for="op in opciones_tamano" :key="op.id" type="button" class="pub-topbar__dd-item"
+                    :aria-pressed="tamano_texto === op.id ? 'true' : 'false'" @click="elegir_tamano(op.id)">
+              <Icon :name="tamano_texto === op.id ? 'bi-check-lg' : 'bi-circle'" />
+              <span>{{ op.label }}</span>
+              <span class="ms-auto text-muted small">{{ op.pct }}</span>
+            </button>
+          </div>
+        </div>
+
         <button class="pub-topbar__toggler d-lg-none" type="button" :aria-expanded="menuAbierto ? 'true' : 'false'"
                 aria-controls="pubNav" :aria-label="menuAbierto ? 'Cerrar menú' : 'Abrir menú'" @click="menuAbierto = !menuAbierto">
           <Icon :name="menuAbierto ? 'bi-x-lg' : 'bi-list'" size="1.4rem" />
@@ -91,6 +107,7 @@ import { AppStore } from "../../stores/app"
 import { useRoute } from 'vue-router'
 import { router } from "../../router"
 import { getToken, setToken, getUserInfo, setUserInfo, logout } from "../../utils/auth"
+import { leerTamanoTexto, guardarTamanoTexto } from "../../utils/tamanoTexto"
 
 const emit  = defineEmits(['buscar_evnt', 'agregar_evnt', 'filtrar_evnt', 'filtros_evnt'])
 const storeApp = AppStore()
@@ -105,6 +122,18 @@ const menuAbierto = ref(false)
 const menu_usuario = ref(false)
 const menu_ref = ref(null)
 
+const opciones_tamano = [
+  { id: 'normal', label: 'Normal', pct: '100%' },
+  { id: 'grande', label: 'Grande', pct: '112,5%' },
+  { id: 'muy-grande', label: 'Muy grande', pct: '125%' },
+]
+const tamano_texto = ref(leerTamanoTexto())
+const panel_tamano = ref(false)
+const tamano_ref = ref(null)
+const btn_tamano_ref = ref(null)
+
+function elegir_tamano(id){ tamano_texto.value = guardarTamanoTexto(id) }
+
 const nombre_usuario = computed(() => {
   const u = storeApp.userInfo || {}
   return [u.name, u.apellido].filter(Boolean).join(' ') || u.email || 'Mi cuenta'
@@ -112,10 +141,18 @@ const nombre_usuario = computed(() => {
 
 function on_click_fuera(e){
   if (menu_usuario.value && menu_ref.value && !menu_ref.value.contains(e.target)) menu_usuario.value = false
+  if (panel_tamano.value && tamano_ref.value && !tamano_ref.value.contains(e.target)) panel_tamano.value = false
 }
 
 function onScroll(){ scrolled.value = (window.scrollY || 0) > 8 }
-function onKey(e){ if (e.key === 'Escape') menuAbierto.value = false }
+function onKey(e){
+  if (e.key !== 'Escape') return
+  menuAbierto.value = false
+  if (panel_tamano.value) {
+    panel_tamano.value = false
+    btn_tamano_ref.value?.focus()
+  }
+}
 watch(() => route.path, () => { menuAbierto.value = false })
 
 const enlaces = ref([
@@ -229,9 +266,7 @@ onBeforeUnmount(()=>{
   border-bottom: 1px solid transparent;
   transition: background var(--gb-transition), box-shadow var(--gb-transition), border-color var(--gb-transition);
   &.is-scrolled {
-    background: color-mix(in srgb, var(--gb-surface) 82%, transparent);
-    backdrop-filter: saturate(180%) blur(12px);
-    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    background: var(--gb-surface);
     border-bottom-color: var(--gb-border);
     box-shadow: var(--gb-shadow-sm);
   }
@@ -268,9 +303,12 @@ onBeforeUnmount(()=>{
     @media (max-width: 991.98px) {
       display: none; flex-basis: 100%; flex-direction: column; align-items: stretch;
       padding: var(--gb-space-2) 0 var(--gb-space-4);
+      background: var(--gb-surface);
       &.is-open { display: flex; }
     }
   }
+  &__tamano { position: relative; }
+  &__tamano-panel { right: 0; width: 240px; min-width: 0; }
   &__links {
     list-style: none; margin: 0; padding: 0; display: flex; gap: .25rem;
     @media (max-width: 991.98px) { flex-direction: column; }

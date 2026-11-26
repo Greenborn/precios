@@ -9,6 +9,7 @@ const fs = require('fs')
 const uuid = require('uuid')
 const busqueda_productos = require("../controllers/busqueda_productos")
 const sync_cache = require("../controllers/sync_cache")
+const { obtener_o_crear_local_sin_local } = require("../helpers/locales_branch")
 
 // Configuración del servicio de colas
 const QUEUE_SERVICE_URL = process.env.QUEUE_SERVICE_URL || 'http://localhost:3501'
@@ -507,9 +508,74 @@ router.put('/cargar_precios_formulario', async function (req, res) {
     }
 })
 
+// Límites y validación de la carga de precios del propio negocio. El front usa las mismas reglas
+// para marcar cada campo; acá se valida de nuevo antes de tocar la base.
+const CARGA_NEGOCIO_MAX_FILAS = 100
+const CARGA_NEGOCIO_MAX_PRECIO = 999999999
+const CARGA_NEGOCIO_LIMITES = { nombre: 200, marca: 100, presentacion: 100 }
+const CARGA_NEGOCIO_FECHA = /^(\d{4})-(\d{2})-(\d{2})$/
+
+// "YYYY-MM-DD" que existe en el calendario (rechaza p. ej. 2026-02-31)
+function fecha_valida(texto) {
+    const m = CARGA_NEGOCIO_FECHA.exec(texto)
+    if (!m) return false
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])
+}
+
+// Devuelve la lista de errores [{ fila?, campo, mensaje }] (vacía si todo está bien)
+function validar_carga_precios_negocio(body) {
+    const errores = []
+    const sin_local = body?.sin_local === true
+    if (!sin_local) {
+        const id = Number(body?.branch_id)
+        if (!(Number.isInteger(id) && id > 0))
+            errores.push({ campo: 'local', mensaje: 'Elegí un local' })
+    }
+
+    if (body?.fecha != null && String(body.fecha) !== '') {
+        const fecha = String(body.fecha)
+        if (!fecha_valida(fecha))
+            errores.push({ campo: 'fecha', mensaje: 'La fecha no es válida' })
+    }
+
+    const productos = Array.isArray(body?.productos) ? body.productos : []
+    if (productos.length > CARGA_NEGOCIO_MAX_FILAS)
+        errores.push({ campo: 'productos', mensaje: `Se pueden cargar hasta ${CARGA_NEGOCIO_MAX_FILAS} artículos por envío` })
+
+    productos.forEach((item, i) => {
+        const fila = i + 1
+        const nombre = String(item?.nombre ?? '').trim()
+        const marca = String(item?.marca ?? '').trim()
+        const presentacion = String(item?.presentacion ?? '').trim()
+        const precio_crudo = item?.precio == null ? '' : String(item.precio).trim()
+        // Fila totalmente vacía: se ignora (igual que en el front)
+        if (!nombre && !marca && !presentacion && precio_crudo === '') return
+
+        if (!nombre) errores.push({ fila, campo: 'nombre', mensaje: 'El nombre del artículo es obligatorio' })
+        else if (nombre.length > CARGA_NEGOCIO_LIMITES.nombre) errores.push({ fila, campo: 'nombre', mensaje: `El nombre no puede superar los ${CARGA_NEGOCIO_LIMITES.nombre} caracteres` })
+        if (marca.length > CARGA_NEGOCIO_LIMITES.marca) errores.push({ fila, campo: 'marca', mensaje: `La marca no puede superar los ${CARGA_NEGOCIO_LIMITES.marca} caracteres` })
+        if (presentacion.length > CARGA_NEGOCIO_LIMITES.presentacion) errores.push({ fila, campo: 'presentacion', mensaje: `La presentación no puede superar los ${CARGA_NEGOCIO_LIMITES.presentacion} caracteres` })
+
+        if (precio_crudo === '') errores.push({ fila, campo: 'precio', mensaje: 'El precio es obligatorio' })
+        else {
+            const precio = Number(precio_crudo.replace(',', '.'))
+            if (!Number.isFinite(precio)) errores.push({ fila, campo: 'precio', mensaje: 'El precio debe ser un número' })
+            else if (precio <= 0) errores.push({ fila, campo: 'precio', mensaje: 'El precio debe ser mayor a 0' })
+            else if (precio > CARGA_NEGOCIO_MAX_PRECIO) errores.push({ fila, campo: 'precio', mensaje: 'El precio es demasiado alto' })
+        }
+    })
+
+    // Sin filas con datos no hay nada que cargar
+    const hay_filas = productos.some((item) => String(item?.nombre ?? '').trim() || String(item?.precio ?? '').trim())
+    if (!hay_filas && !errores.length) errores.push({ campo: 'productos', mensaje: 'Debe cargar al menos un artículo con nombre y precio' })
+    return errores
+}
+
 // Carga de precios del propio negocio (área privada /mi-negocio). A diferencia de
 // cargar_precios_formulario, el local se toma por id y debe pertenecer al usuario
-// autenticado. Devuelve el detalle por ítem (product_id) para adjuntar fotos.
+// autenticado, o bien se usa el local "sin local" del usuario (se crea la primera vez).
+// Devuelve el detalle por ítem (product_id) para adjuntar fotos y el branch_id usado.
 router.put('/cargar_precios_negocio', async function (req, res) {
     try {
         const usuario = req.session?.u_data
@@ -522,20 +588,28 @@ router.put('/cargar_precios_negocio', async function (req, res) {
             return
         }
 
-        const BRANCH_ID = Number(req.body?.branch_id)
-        const local = Number.isInteger(BRANCH_ID) && BRANCH_ID > 0
-            ? await global.knex('branch').where({ id: BRANCH_ID }).first()
-            : null
-        if (!local || String(local.propietario_id) !== String(usuario.id)){
-            res.status(200).send({ stat: false, error: "El local no pertenece a tu cuenta" })
+        const errores = validar_carga_precios_negocio(req.body)
+        if (errores.length){
+            res.status(400).send({ stat: false, error: errores[0].mensaje, errores })
             return
         }
 
-        const PRODUCTOS = Array.isArray(req.body?.productos) ? req.body.productos.slice(0, 100) : []
-        if (PRODUCTOS.length == 0){
-            res.status(200).send({ stat: false, error: "Debe cargar al menos un producto" })
-            return
+        let branch
+        if (req.body?.sin_local === true){
+            branch = await obtener_o_crear_local_sin_local(global.knex, usuario)
+        } else {
+            const BRANCH_ID = Number(req.body.branch_id)
+            const local = await global.knex('branch').where({ id: BRANCH_ID }).first()
+            if (!local || String(local.propietario_id) !== String(usuario.id)){
+                res.status(400).send({ stat: false, error: "El local no pertenece a tu cuenta", errores: [{ campo: 'local', mensaje: 'El local no pertenece a tu cuenta' }] })
+                return
+            }
+            branch = local
         }
+        const BRANCH_ID = Number(branch.id)
+
+        const PRODUCTOS = req.body.productos
+            .filter((item) => String(item?.nombre ?? '').trim() || String(item?.precio ?? '').trim())
 
         // Fecha "YYYY-MM-DD" al mediodía local (mismo criterio que cargar_precios_formulario)
         let FECHA = new Date()
@@ -553,12 +627,7 @@ router.put('/cargar_precios_negocio', async function (req, res) {
             const item = PRODUCTOS[i]
             const nombre_canonico = [item?.nombre, item?.marca, item?.presentacion]
                 .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-            const precio = Number(item?.precio)
-
-            if (!nombre_canonico || !precio || precio <= 0){
-                detalle.push({ indice: i, ok: false, error: "Nombre o precio inválido" })
-                continue
-            }
+            const precio = Number(String(item?.precio).replace(',', '.'))
 
             const producto = await resolver_producto_form(nombre_canonico, item?.marca)
             if (!producto){
@@ -574,15 +643,19 @@ router.put('/cargar_precios_negocio', async function (req, res) {
         }
 
         const cargados = detalle.filter(d => d.ok).length
+        const items = { cargados, con_error: detalle.length - cargados, detalle, branch_id: BRANCH_ID }
         if (cargados == 0)
-            res.status(200).send({ stat: false, error: "No se pudo cargar ningún precio, verifique los datos e reintente", items: { cargados, con_error: detalle.length, detalle } })
+            res.status(200).send({ stat: false, error: "No se pudo cargar ningún precio, verifique los datos e reintente", items })
         else
-            res.status(200).send({ stat: true, items: { cargados, con_error: detalle.length - cargados, detalle } })
+            res.status(200).send({ stat: true, items })
     } catch (error) {
-        console.log("error al cargar precios del negocio", error)
+        console.error("error al cargar precios del negocio", error)
         res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
     }
 })
+
+// Expuesto para test_carga_precios_negocio.js (validación sin base de datos)
+router.validar_carga_precios_negocio = validar_carga_precios_negocio
 
 // Identificador único de cola (productos + ofertas)
 // cada item llevará un campo `tipo` para distinguir su procesamiento

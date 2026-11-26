@@ -16,6 +16,10 @@ import { getRouterConRutas } from './utils/auth'
 import { routerBeforeEach } from './utils/routes'
 import { router } from "./router";
 import { initPwa } from "./pwa";
+import { aplicarTamanoTexto, leerTamanoTexto } from "./utils/tamanoTexto";
+
+// Antes del primer render: evita un salto de tamaño de letra al cargar.
+aplicarTamanoTexto(leerTamanoTexto());
 
 import Button from "./components/ui/Button.vue";
 import InputText from "./components/ui/InputText.vue";

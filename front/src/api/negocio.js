@@ -1,9 +1,8 @@
 // Área privada del negocio: locales, perfil, fotos de artículos y carga de precios propios.
 // - `http`: instancia axios (rechaza ante error y devuelve { data }), requerida por los
 //   paquetes @greenborn/vue-greenborn-perfil y @greenborn/vue-greenborn-locales-mapa.
-// - Carga de precios: usa el request del proyecto, igual que el resto de /publico.
+// - Carga de precios: usa la misma instancia `http` (incluye el token de sesión).
 import axios from 'axios'
-import request from '@/helpers/request'
 import { getToken, setToken } from '@/utils/auth'
 
 export const http = axios.create({
@@ -35,7 +34,7 @@ http.interceptors.response.use(
 
 // Carga de precios del local propio. Respuesta: { stat, items: { cargados, con_error, detalle } }
 export function cargar_precios_negocio(data) {
-  return request({ url: '/publico/productos/cargar_precios_negocio', method: 'put', data })
+  return http.put('/publico/productos/cargar_precios_negocio', data).then((r) => r.data)
 }
 
 export function guardar_foto_articulo(branchId, productId, imagen) {

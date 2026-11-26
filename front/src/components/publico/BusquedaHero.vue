@@ -4,7 +4,8 @@
     <h1 id="hero-title" class="pub-hero__title">Encontrá el mejor precio<br class="d-none d-sm-inline"> antes de salir a comprar</h1>
     <p class="pub-hero__lead">Compará precios de comercios locales, cargados por la comunidad y actualizados todos los días.</p>
 
-    <form class="pub-search" role="search" @submit.prevent="enviar">
+    <div ref="wrap" class="pub-search-wrap" :style="fijo && altoFijo ? { minHeight: altoFijo + 'px' } : null">
+    <form ref="form" class="pub-search" :class="{ 'is-sticky': fijo }" role="search" @submit.prevent="enviar">
       <Icon name="bi-search" class="pub-search__icon" />
       <label for="busqueda-principal" class="visually-hidden">Nombre del producto</label>
       <input id="busqueda-principal" class="pub-search__input" type="search" autocomplete="off"
@@ -24,6 +25,7 @@
         <Icon v-if="!loading" name="bi-arrow-right" class="d-sm-none" label="Buscar" />
       </button>
     </form>
+    </div>
 
     <div class="pub-hero__hints">
       <span>Probá con:</span>
@@ -40,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { sugerencias_busqueda } from '../../api/public/publicEndpoints'
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -90,7 +92,39 @@ function enviar(){
   emit('buscar')
 }
 
-onBeforeUnmount(() => clearTimeout(timer))
+// Buscador sticky (sólo móvil): cuando el del hero sale de pantalla, el mismo formulario
+// queda fijo debajo de la topbar. El contenedor conserva su alto para que la página no salte.
+const wrap = ref(null)
+const form = ref(null)
+const fijo = ref(false)
+const altoFijo = ref(0)
+const MOVIL = '(max-width: 767.98px)'
+let observador = null
+
+let hero_visible = true
+function actualizar_fijo(visible){
+  hero_visible = visible
+  const movil = window.matchMedia(MOVIL).matches
+  const debe_fijarse = movil && !visible
+  if (debe_fijarse && !fijo.value && form.value) altoFijo.value = form.value.offsetHeight
+  fijo.value = debe_fijarse
+}
+
+onMounted(() => {
+  if (!('IntersectionObserver' in window) || !wrap.value) return
+  // La topbar tapa 4rem arriba: se considera invisible si queda debajo de ella
+  observador = new IntersectionObserver(([e]) => actualizar_fijo(e.isIntersecting), { rootMargin: '-64px 0px 0px 0px' })
+  observador.observe(wrap.value)
+  window.addEventListener('resize', onResize)
+})
+
+function onResize(){ actualizar_fijo(hero_visible) }
+
+onBeforeUnmount(() => {
+  clearTimeout(timer)
+  observador?.disconnect()
+  window.removeEventListener('resize', onResize)
+})
 
 function elegir(s){
   req_id++; clearTimeout(timer); cerrar()

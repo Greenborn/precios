@@ -27,6 +27,7 @@ const PI_TO_BI = {
   'pi-tags': 'bi-tags',
   'pi-clock': 'bi-clock',
   'pi-chart-line': 'bi-graph-up',
+  'pi-map-marker': 'bi-geo-alt',
   'pi-list': 'bi-list',
   'pi-table': 'bi-table',
   'pi-address-book': 'bi-journal-bookmark',

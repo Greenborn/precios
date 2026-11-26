@@ -48,6 +48,8 @@ const PERMISOS = [
   { nombre: 'alias_categorias.editar',   descripcion: 'Editar alias de categorías' },
   { nombre: 'alias_categorias.eliminar', descripcion: 'Eliminar alias de categorías' },
   { nombre: 'indices_precios.ver',      descripcion: 'Ver índices de precios' },
+  { nombre: 'locales.ver',   descripcion: 'Ver locales (branch) del panel admin' },
+  { nombre: 'locales.editar', descripcion: 'Cambiar el flag publicado de los locales' },
   { nombre: 'indices_precios.crear',    descripcion: 'Crear índices de precios' },
   { nombre: 'indices_precios.editar',   descripcion: 'Editar índices de precios' },
   { nombre: 'indices_precios.eliminar', descripcion: 'Eliminar índices de precios' },
@@ -70,6 +72,7 @@ const RUTAS = [
   { path: 'categorias',    componente: 'AbmCategorias',    icon: 'pi-table',           title: 'Categorías',  orden_visualizacion: 5 },
   { path: 'alias_categorias', componente: 'AbmAliasCategorias', icon: 'pi-tag', title: 'Alias de Categorías', orden_visualizacion: 6 },
   { path: 'indices_precios', componente: 'AbmIndicesPrecios', icon: 'pi-chart-line', title: 'Índices de Precios', orden_visualizacion: 7 },
+  { path: 'locales', componente: 'AbmLocales', icon: 'pi-map-marker', title: 'Locales', orden_visualizacion: 8 },
 ]
 
 async function seed_rbac() {

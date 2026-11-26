@@ -1,6 +1,7 @@
 require("dotenv").config({ path: '.env' })
 const busqueda_productos = require("./controllers/busqueda_productos")
 const sync_cache = require("./controllers/sync_cache")
+const categorias_cache = require("./controllers/categorias_cache")
 const precios_negocio = require("./controllers/precios_negocio")
 const alias_busqueda_ctrl = require("./controllers/alias_busqueda")
 const { spawn } = require('child_process')
@@ -128,10 +129,7 @@ async function regenerar_diccionarios(){
   await sync_cache.construir_categorias()
 
   console.log('[regenerar_diccionarios] Generando diccionario de categorías...')
-  if (category){
-    for (let i=0; i < category.length; i++)
-      global.diccio_name_category[category[i].name] = category[i]
-  }
+  categorias_cache.cargar(category, product_category)
 
   if (product_category && global.alias_productos && locales && enterprice){
     console.log('[regenerar_diccionarios] Generando diccionarios de empresas y sucursales...')
@@ -162,10 +160,6 @@ async function regenerar_diccionarios(){
     await busqueda_productos.inicializa_buscador()
   }
   
-  if (category)
-    for (let i=0; i < category.length; i++)
-      global.category_diccio[Number(category[i].id)] = category[i]
-
   await recargar_alias_busqueda()
 
   console.log('[regenerar_diccionarios] ✓ Regeneración completada exitosamente')

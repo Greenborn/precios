@@ -1,0 +1,79 @@
+/* ---------- Modales en móvil (T8 · nota 328) ----------
+   Hasta 575.98px todos los modales ocupan la pantalla completa, sin radio,
+   con scroll interno. Cubre:
+   - .gmm-dialog (paquete @greenborn/vue-greenborn-modal-manager, sólo CSS)
+   - .dialog-* de src/components/ui/Dialog.vue (storeApp.mostrar_modal)
+   - .recorte-dialog de RecorteModal.vue
+   Los estilos de Dialog.vue son scoped (mayor especificidad), por eso !important. */
+@media (max-width: 575.98px) {
+  /* Paquete gmm */
+  .gmm-overlay {
+    padding: 0 !important;
+  }
+  .gmm-dialog {
+    width: 100% !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    overflow: auto !important;
+  }
+  .gmm-dialog .gmm-content-wrapper {
+    overflow: auto;
+  }
+
+  /* Dialog.vue (storeApp.mostrar_modal) */
+  .dialog-overlay {
+    padding: 0 !important;
+    align-items: stretch !important;
+    overflow: hidden !important;
+  }
+  .dialog-overlay .dialog-content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* RecorteModal.vue */
+  .recorte-backdrop {
+    padding: 0 !important;
+  }
+  .recorte-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* ---------- Selector de mapa en móvil (T9 · nota 329) ----------
+   .vgms-picker pertenece a @greenborn/vue-greenborn-map-selector (paquete externo).
+   Sus botones van en un .d-flex.justify-content-end: en móvil se permite
+   que envuelvan y que no desborden el ancho del modal. */
+@media (max-width: 575.98px) {
+  .vgms-picker {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  .vgms-picker > .d-flex {
+    flex-wrap: wrap !important;
+    justify-content: flex-end;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .vgms-picker > .d-flex > .btn {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+}

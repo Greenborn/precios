@@ -96,6 +96,23 @@ body.cls-public { background: var(--gb-bg); }
   position: relative;
   &:focus-within { box-shadow: var(--gb-shadow-lg), var(--gb-focus-ring); }
 
+  // Móvil: cuando el buscador del hero sale de pantalla, BusquedaHero.vue agrega
+  // .is-sticky y el formulario queda fijo debajo de la topbar.
+  @media (max-width: 767.98px) {
+    &.is-sticky {
+      position: fixed;
+      top: calc(4rem + env(safe-area-inset-top));
+      left: 0; right: 0;
+      max-width: none;
+      margin: 0;
+      z-index: 1020; // menor que .pub-topbar (1030)
+      padding: var(--gb-space-2) var(--gb-space-3);
+      background: var(--gb-surface);
+      box-shadow: var(--gb-shadow-sm);
+      border-radius: 0;
+    }
+  }
+
   &__sugs {
     position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 1050;
     list-style: none; margin: 0; padding: .25rem; text-align: left;

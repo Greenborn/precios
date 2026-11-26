@@ -21,6 +21,7 @@ router.use("/alias_categorias", require("../routes/aliasCategorias"))
 router.use("/indices_precios", require("../routes/indicesPreciosAdmin"))
 router.use("/precios_comunitarios", require("../routes/preciosComunitarios"))
 router.use("/precios_hoy", require("../routes/preciosHoy"))
+router.use("/locales", require("../routes/localesAdmin"))
 
 var paths = [
   { path: "/user/login", public: true },
@@ -71,5 +72,7 @@ var paths = [
   { path: "/indices_precios/delete_one", permisos: ["indices_precios.eliminar"] },
   { path: "/precios_comunitarios/list", permisos: ["precios.listar"] },
   { path: "/precios_hoy/list", permisos: ["precios_hoy.listar"] },
+  { path: "/locales/get_all", permisos: ["locales.ver"] },
+  { path: "/locales/put_one", permisos: ["locales.editar"] },
   { path: "/comercios", public: true },
 ]

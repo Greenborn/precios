@@ -351,7 +351,8 @@ router.get('/info_comercio', async function (req, res) {
             return res.status(200).send({ stat: false, error: "No se encontro comercio con esa URL" })
         }
 
-        let branches = await global.knex('branch').where('enterprise_id', enterprice.id)
+        // El local interno "sin local" (sin_local) nunca se expone públicamente
+        let branches = await global.knex('branch').where('enterprise_id', enterprice.id).whereNull('sin_local')
 
         res.status(200).send({
             stat: true,

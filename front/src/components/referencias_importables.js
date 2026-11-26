@@ -14,5 +14,6 @@ export const referencias_componentes = {
   AbmCategorias: () => import('./admin/abmCategorias/AbmCategorias.vue'),
   AbmAliasCategorias: () => import('./admin/abmAliasCategorias/AbmAliasCategorias.vue'),
   AbmIndicesPrecios: () => import('./admin/abmIndicesPrecios/AbmIndicesPrecios.vue'),
+  AbmLocales: () => import('./admin/abmLocales/AbmLocales.vue'),
   ConfigCuenta: () => import('./admin/cuenta/ConfigCuenta.vue'),
 }

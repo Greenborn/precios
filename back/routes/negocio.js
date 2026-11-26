@@ -182,13 +182,15 @@ router.get('/negocio/publico/:perfilId/contactos', async (req, res) => {
 
 // ---------- Eliminar los datos de la cuenta ----------
 // DELETE /api/negocio/mi-cuenta/datos
-// Borra perfil, imágenes, locales (con sus fotos de artículos) y todos los precios
+// Borra perfil, imágenes, locales (incluido el "sin local", que es un branch del usuario
+// con su enterprice asociada; con sus fotos de artículos) y todos los precios
 // (histórico y vigentes) cargados por el usuario. La cuenta de acceso no se elimina.
 router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
   try {
     const uid = req.user.id
-    const locales = await knex('branch').where({ propietario_id: uid }).select('id')
+    const locales = await knex('branch').where({ propietario_id: uid }).select('id', 'enterprise_id')
     const ids = locales.map((l) => l.id)
+    const comercios = [...new Set(locales.map((l) => l.enterprise_id).filter((e) => e != null))]
 
     await knex.transaction(async (trx) => {
       await trx('price_today').where({ user_id: uid }).del()
@@ -208,6 +210,11 @@ router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
         if (f.startsWith(`${id}_`)) fs.unlinkSync(path.join(cfg.FOTOS_DIR, f))
       }
       await localesRepo.eliminar(id)
+    }
+    // Comercios (enterprice) del usuario: se quitan sólo si ya no les queda ningún local
+    for (const eid of comercios) {
+      const quedan = await knex('branch').where({ enterprise_id: eid }).first('id')
+      if (!quedan) await knex('enterprice').where({ id: eid }).del()
     }
     borrar_img_perfil(`${uid}_portada.`)
     borrar_img_perfil(`${uid}_foto.`)
@@ -382,10 +389,11 @@ async function dueno_de_perfil(req, res) {
   return perfil.usuario_id
 }
 
-// Locales publicados del dueño: { id, nombre, calle, ciudad, latitud, longitud }
+// Todos los locales del dueño (la ficha pública los muestra siempre): { id, nombre, calle, ciudad, latitud, longitud }
 async function locales_publicos(usuarioId) {
   const filas = await knex('branch')
-    .where({ propietario_id: usuarioId, publicado: true })
+    .where({ propietario_id: usuarioId })
+    .whereNull('sin_local') // el local "sin local" es interno y nunca se muestra en la ficha
     .orderBy('id')
     .select('id', 'branch_name', 'address', 'city', 'latitude', 'longitude')
   return filas.map((f) => ({
