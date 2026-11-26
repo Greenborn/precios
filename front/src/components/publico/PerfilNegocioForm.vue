@@ -22,7 +22,8 @@
         </template>
 
         <div v-if="campo.publicable" class="form-check form-switch mt-2">
-          <input :id="`perfil-${campo.nombre}-mostrar`" v-model="valores[campo.interruptor]" class="form-check-input" type="checkbox" role="switch">
+          <input :id="`perfil-${campo.nombre}-mostrar`" v-model="valores[campo.interruptor]" class="form-check-input" type="checkbox" role="switch"
+                 :disabled="cargando || !tieneValor(campo)">
           <label class="form-check-label small" :for="`perfil-${campo.nombre}-mostrar`">Mostrar en mi perfil público</label>
         </div>
       </div>
@@ -37,7 +38,7 @@
 </template>
 
 <script setup>
-import { watch, onBeforeUnmount } from 'vue'
+import { watch, onBeforeUnmount, unref } from 'vue'
 import { usePerfil } from '@greenborn/vue-greenborn-perfil'
 
 // Mismo comportamiento que PerfilEditor del paquete, con controles Bootstrap.
@@ -70,7 +71,18 @@ function reprogramar() {
   temporizador = setTimeout(guardarSiHayCambios, DEBOUNCE_MS)
 }
 
-watch(valores, () => { if (hayCambios.value) reprogramar() }, { deep: true })
+// El interruptor "mostrar en perfil público" sólo se puede usar con contenido cargado
+function tieneValor(campo) {
+  return String(valores[campo.nombre] ?? '').trim() !== ''
+}
+
+// Sin contenido el dato no puede publicarse: el interruptor queda apagado
+watch(valores, () => {
+  for (const campo of unref(formulario)) {
+    if (campo.publicable && campo.interruptor && !tieneValor(campo)) valores[campo.interruptor] = false
+  }
+  if (hayCambios.value) reprogramar()
+}, { deep: true })
 onBeforeUnmount(() => {
   clearTimeout(temporizador)
   if (hayCambios.value && !guardando.value) guardar()

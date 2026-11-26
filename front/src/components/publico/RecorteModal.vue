@@ -86,6 +86,10 @@ watch(() => props.archivo, async (archivo) => {
 
 onBeforeUnmount(liberar)
 
+// Dibuja en cuanto existen a la vez el lienzo y la imagen. Antes sólo se dibujaba al cargar la
+// imagen: si el lienzo todavía no estaba montado, quedaba el fondo negro hasta mover el zoom.
+watch([lienzo, imagen], () => dibujar(), { flush: 'post' })
+
 const escala = () => Math.max(props.ancho / imagen.value.width, props.alto / imagen.value.height) * zoom.value
 
 function dibujar() {

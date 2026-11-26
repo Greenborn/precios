@@ -49,7 +49,7 @@
 
 
       <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
-        <button v-if="!nuevo" type="button" class="btn btn-outline-danger btn-sm" :disabled="guardando" @click="$emit('eliminar')">
+        <button v-if="!nuevo && permitirEliminar" type="button" class="btn btn-outline-danger btn-sm" :disabled="guardando" @click="$emit('eliminar')">
           <i class="bi bi-trash me-1" aria-hidden="true"></i>Eliminar
         </button>
         <span v-else></span>
@@ -71,6 +71,8 @@ import { useMapSelector } from '@greenborn/vue-greenborn-map-selector'
 const props = defineProps({
   local: { type: Object, default: null },
   guardando: { type: Boolean, default: false },
+  // Dentro del modal de edición la eliminación se hace desde la card de resumen
+  permitirEliminar: { type: Boolean, default: true },
   // Centro del mapa cuando el local todavía no tiene coordenadas (Tandil)
   centro: { type: Object, default: () => ({ lat: -37.3217, lng: -59.1332 }) },
 })

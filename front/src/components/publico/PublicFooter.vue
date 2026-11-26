@@ -30,7 +30,7 @@
           </ul>
         </nav>
       </div>
-      <div class="pub-footer__bottom">© {{ anio }} Precios de Tandil · Greenborn</div>
+      <div class="pub-footer__bottom">© {{ anio }} Precios de Tandil · <a href="https://greenborn.com.ar" target="_blank" rel="noopener noreferrer">Greenborn</a></div>
     </div>
   </footer>
 </template>

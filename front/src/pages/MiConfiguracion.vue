@@ -38,6 +38,15 @@
           </div>
         </div>
       </Card>
+
+      <Card id="seccion-zona-peligro" title="Eliminar los datos de mi cuenta" icon="bi-exclamation-triangle" class="mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <small class="gb-text-muted">Elimina tu perfil, locales, fotos y todos los precios que cargaste. Tu cuenta de acceso se conserva, pero se cerrará la sesión al terminar. No se puede deshacer.</small>
+          <button type="button" class="btn btn-outline-danger btn-sm" :disabled="eliminando" @click="eliminar_cuenta">
+            <i class="bi bi-trash me-1" aria-hidden="true"></i>Eliminar los datos de mi cuenta
+          </button>
+        </div>
+      </Card>
     </div>
   </main>
   <PublicFooter />
@@ -49,13 +58,36 @@ import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
 import FormularioGenerico from '@/components/genericos/FormularioGenerico'
 import { guardarConfig } from '@/api/admin/userAdmin'
-import { getUserInfo } from '@/utils/auth'
+import { eliminar_datos_cuenta } from '@/api/negocio'
+import { getUserInfo, logout } from '@/utils/auth'
 import { AppStore } from '@/stores/app'
 
 const storeApp = AppStore()
 
 const es_negocio = ref(false)
 const guardando_negocio = ref(false)
+const eliminando = ref(false)
+
+// Borra perfil, locales, fotos y precios. Si el borrado sale bien, cierra la sesión.
+function eliminar_cuenta() {
+  storeApp.mostrar_confirm({
+    title: 'Eliminar los datos de la cuenta',
+    text: 'Se borrarán tu perfil, tus locales, las fotos y todos los precios que cargaste, incluido el histórico. Al terminar se cerrará tu sesión. Esta acción no se puede deshacer. ¿Continuar?',
+    severity_confirmar: 'danger',
+    confirmar_accion: async () => {
+      eliminando.value = true
+      try {
+        await eliminar_datos_cuenta()
+      } catch (err) {
+        eliminando.value = false
+        storeApp.mostrar_alerta(err?.response?.data?.error || 'No se pudieron eliminar los datos de la cuenta')
+        return
+      }
+      eliminando.value = false
+      await logout(storeApp)
+    },
+  })
+}
 
 const formulario_config = ref({
   'id': '',
@@ -134,4 +166,8 @@ onMounted(() => {
 
 <style scoped>
 .cuenta-form { max-width: 560px; }
+/* Label arriba del campo (antes quedaba en columna de 3/12, desalineado del input) */
+.cuenta-form :deep(.label-cont) { flex: 0 0 100%; max-width: 100%; padding-top: 0; margin-bottom: .375rem; }
+.cuenta-form :deep(.label-cont label) { font-weight: 600; }
+.cuenta-form :deep(.row > .col) { flex: 0 0 100%; max-width: 100%; }
 </style>

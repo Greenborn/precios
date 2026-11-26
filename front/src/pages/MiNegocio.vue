@@ -39,28 +39,20 @@
         <PerfilNegocioForm :api="http" base="/api/perfil" :campos="CAMPOS_PERFIL" :terminos="TERMINOS_NEGOCIO" />
         <hr class="my-4">
         <ContactosForm />
-        <hr class="my-4">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-          <small class="gb-text-muted">Elimina tu perfil, locales, fotos y todos los precios que cargaste. No se puede deshacer.</small>
-          <button type="button" class="btn btn-outline-danger btn-sm" @click="eliminar_cuenta">
-            <i class="bi bi-trash me-1" aria-hidden="true"></i>Eliminar los datos de mi cuenta
-          </button>
-        </div>
       </Card>
 
       <!-- 2. Locales -->
       <Card id="seccion-locales" title="Mis locales" icon="bi-geo-alt" class="mb-4">
-        <p class="gb-text-muted small mb-3">
-          Cada local nuevo recibe un código identificador. No se permiten locales duplicados (mismo nombre, dirección y ciudad).
-        </p>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <p class="gb-text-muted small mb-0">
+            Cada local nuevo recibe un código identificador. No se permiten locales duplicados (mismo nombre, dirección y ciudad).
+          </p>
+          <Button variant="outline" icon="bi-plus-lg" label="Agregar local" @click="abrir_formulario_local()" />
+        </div>
 
         <div class="row g-3 mb-4">
           <div v-for="l in locales" :key="l.id" class="col-12 col-xl-6">
-            <LocalCard :local="l" :guardando="guardando_id === l.id"
-                       @guardar="(datos) => guardar_local(l, datos)" @eliminar="eliminar_local(l)" />
-          </div>
-          <div class="col-12 col-xl-6">
-            <LocalCard :guardando="guardandoLocal" @guardar="(datos, limpiar) => agregar_local(datos, limpiar)" />
+            <LocalResumen :local="l" @editar="abrir_formulario_local(l)" @eliminar="eliminar_local(l)" />
           </div>
         </div>
         <EmptyState v-if="!cargando && !locales.length" size="sm" icon="bi-geo-alt" title="Sin locales"
@@ -192,7 +184,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CabeceraNegocio from '../components/publico/CabeceraNegocio.vue'
-import LocalCard from '../components/publico/LocalCard.vue'
+import LocalResumen from '../components/publico/LocalResumen.vue'
+import FormularioLocalModal from '../components/publico/FormularioLocalModal.vue'
 import RecorteModal from '../components/publico/RecorteModal.vue'
 import PublicTopBar from '../components/publico/PublicTopBar.vue'
 import PublicFooter from '../components/publico/PublicFooter.vue'
@@ -200,7 +193,7 @@ import ContactosForm from '../components/publico/ContactosForm.vue'
 import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios, eliminar_datos_cuenta } from '../api/negocio'
+import { http, cargar_precios_negocio, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -218,7 +211,6 @@ const storeApp = AppStore()
 const { locales, cargando, cargar, crear, actualizar, eliminar } = useLocales({ api: http, base: '/api' })
 
 const mensajeExito = ref('')
-const guardandoLocal = ref(false)
 
 const enviandoPrecios = ref(false)
 const local_precios = ref(null)
@@ -299,56 +291,45 @@ onMounted(async () => {
   obtener_mi_perfil().then((p) => { perfil_id.value = p?.id ?? null }).catch(() => {})
 })
 
-const guardando_id = ref(null)
+// Alta y edición de locales se hacen en un modal. El callback devuelve true si se guardó (el modal se cierra).
+function abrir_formulario_local(local = null) {
+  const titulo = local ? `Editar local - ${local.nombre || 'sin nombre'}` : 'Nuevo local'
+  const modal_form = storeApp.mostrar_modal(FormularioLocalModal, titulo, {
+    local,
+    _callback_guardar: (datos) => (local ? guardar_local(local, datos) : agregar_local(datos)),
+    _cerrar: () => storeApp.ocultar_modal(modal_form.code),
+  })
+}
 
-async function agregar_local(datos, limpiar) {
+async function agregar_local(datos) {
   if (!datos.nombre) {
     storeApp.mostrar_alerta('Debe indicar el nombre del local')
-    return
+    return false
   }
-  guardandoLocal.value = true
   try {
     const creado = await crear(datos)
-    limpiar?.()
     if (!local_precios.value) local_precios.value = creado.id
     mensajeExito.value = `Local creado. Código: ${creado.codigo || '—'}`
+    return true
   } catch (err) {
     storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo crear el local'))
-  } finally {
-    guardandoLocal.value = false
+    return false
   }
 }
 
 async function guardar_local(local, datos) {
   if (!datos.nombre) {
     storeApp.mostrar_alerta('Debe indicar el nombre del local')
-    return
+    return false
   }
-  guardando_id.value = local.id
   try {
     await actualizar(local.id, datos)
     mensajeExito.value = 'Local actualizado'
+    return true
   } catch (err) {
     storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo guardar el local'))
-  } finally {
-    guardando_id.value = null
+    return false
   }
-}
-
-function eliminar_cuenta() {
-  storeApp.mostrar_confirm({
-    title: 'Eliminar los datos de la cuenta',
-    text: 'Se borrarán tu perfil, tus locales, las fotos y todos los precios que cargaste, incluido el histórico. Esta acción no se puede deshacer. ¿Continuar?',
-    severity_confirmar: 'danger',
-    confirmar_accion: async () => {
-      try {
-        await eliminar_datos_cuenta()
-        window.location.reload()
-      } catch (err) {
-        storeApp.mostrar_alerta(mensaje_error(err, 'No se pudieron eliminar los datos de la cuenta'))
-      }
-    },
-  })
 }
 
 function eliminar_local(local) {
@@ -406,12 +387,43 @@ function elegir_foto(fila, evento) {
   evento.target.value = ''
 }
 
+const numero_precio = (valor) => Number(String(valor ?? '').replace(',', '.'))
+
+// Motivo por el que una fila no se puede enviar (null si está bien)
+function motivo_fila(f) {
+  const nombre = String(f.nombre || '').trim()
+  const tienePrecio = String(f.precio ?? '').trim() !== ''
+  if (!nombre && !tienePrecio) return null // fila vacía: se ignora
+  if (!nombre) return 'falta el nombre del artículo'
+  if (!tienePrecio) return 'falta el precio'
+  if (!(numero_precio(f.precio) > 0)) return 'el precio debe ser un número mayor a 0'
+  return null
+}
+
+// Arma un texto corto con las filas que fallaron: "Fila 2 (Arroz): falta el precio; ..."
+const MAX_FILAS_EN_ALERTA = 5
+function texto_filas_con_error(entradas) {
+  const partes = entradas.slice(0, MAX_FILAS_EN_ALERTA).map((e) => `Fila ${e.fila}${e.nombre ? ` (${e.nombre})` : ''}: ${e.motivo}`)
+  if (entradas.length > MAX_FILAS_EN_ALERTA) partes.push(`y ${entradas.length - MAX_FILAS_EN_ALERTA} más`)
+  return partes.join('; ')
+}
+
 async function enviar_precios() {
   if (!local_precios.value) {
     storeApp.mostrar_alerta('Debe elegir un local')
     return
   }
-  const validos = filas.value.filter((f) => f.nombre.trim() && Number(String(f.precio).replace(',', '.')) > 0)
+  // Antes de enviar se avisa qué fila está mal y por qué (no se descarta en silencio)
+  const con_problemas = filas.value
+    .map((f, i) => ({ fila: i + 1, nombre: String(f.nombre || '').trim(), motivo: motivo_fila(f) }))
+    .filter((e) => e.motivo)
+  if (con_problemas.length) {
+    storeApp.mostrar_alerta(`No se enviaron los precios. Corregí: ${texto_filas_con_error(con_problemas)}`)
+    return
+  }
+  // origen[k] = posición de la fila en el formulario de la fila k enviada
+  const origen = filas.value.map((_, i) => i).filter((i) => motivo_fila(filas.value[i]) === null && String(filas.value[i].nombre || '').trim())
+  const validos = origen.map((i) => filas.value[i])
   if (!validos.length) {
     storeApp.mostrar_alerta('Debe cargar al menos un artículo con nombre y precio')
     return
@@ -429,8 +441,18 @@ async function enviar_precios() {
         precio: Number(String(f.precio).replace(',', '.')),
       })),
     })
+    // Filas rechazadas por el back, con su número de fila del formulario y el motivo
+    const errores = (res?.items?.detalle || [])
+      .filter((d) => !d.ok)
+      .map((d) => ({
+        fila: origen[d.indice] + 1,
+        nombre: String(validos[d.indice]?.nombre || '').trim(),
+        motivo: d.error || 'no se pudo guardar',
+      }))
+
     if (res?.error || !res?.items) {
-      storeApp.mostrar_alerta(res?.error || res?.text || 'No se pudieron cargar los precios')
+      const base = res?.error || res?.text || 'No se pudieron cargar los precios'
+      storeApp.mostrar_alerta(errores.length ? `${base}. ${texto_filas_con_error(errores)}` : base)
       return
     }
 
@@ -453,7 +475,11 @@ async function enviar_precios() {
     if (fotos_ok) texto += `. Fotos guardadas: ${fotos_ok}`
     if (fotos_err) texto += `. Fotos con error: ${fotos_err}`
     mensajeExito.value = texto
-    filas.value = [filas_vacia()]
+    // Las filas que fallaron quedan en el formulario para corregirlas y reenviarlas
+    const fallidas = new Set((res.items.detalle || []).filter((d) => !d.ok).map((d) => origen[d.indice]))
+    const pendientes = filas.value.filter((_, i) => fallidas.has(i))
+    filas.value = pendientes.length ? pendientes : [filas_vacia()]
+    if (errores.length) storeApp.mostrar_alerta(`Algunas filas no se cargaron: ${texto_filas_con_error(errores)}`)
     cargar_mis_precios(true)
   } catch (err) {
     storeApp.mostrar_alerta(mensaje_error(err, 'Error al enviar los precios'))

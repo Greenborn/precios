@@ -1,231 +1,168 @@
 <template>
   <div class="contactos-fb">
-    <h5 class="mb-2">Datos de contacto y redes</h5>
-    <p class="text-muted">
-      Todos los datos son opcionales. Dejá vacío el que no quieras cargar y apagá
-      <em>Mostrar en mi perfil</em> para guardarlo sin publicarlo. Podés cargar más de un
-      dato de cada tipo (por ejemplo dos teléfonos o dos emails).
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <h5 class="mb-0">Datos de contacto y redes</h5>
+      <button type="button" class="btn btn-success btn-sm" @click="abrirModal()">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar red o contacto
+      </button>
+    </div>
+    <p class="text-muted small mb-3">
+      Se guardan automáticamente. Activá <em>Mostrar en mi perfil</em> para publicar cada dato.
     </p>
 
-    <!-- Una card por tipo de contacto: 1 columna en móvil, 2 en tablet y 3 en desktop -->
+    <p v-if="!cargando && !contactos.length" class="text-muted small mb-0">Todavía no agregaste datos de contacto.</p>
+
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
-      <div v-for="tipo in tipos" :key="tipo.tipo" class="col">
-        <div class="card h-100 contacto-card" role="group" :aria-label="tipo.label">
-          <div class="card-body">
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <span class="contacto-marca" :style="estiloMarca(tipo)">
-              <i :class="['bi', tipo.icono]" aria-hidden="true"></i>
-            </span>
-            <span class="fw-semibold">{{ tipo.label }}</span>
-          </div>
-
-          <div v-for="(fila, indice) in valores[tipo.tipo]" :key="indice" class="contacto-dato mb-3">
-            <label class="form-label small mb-1" :for="`contacto-${tipo.tipo}-${indice}`">
-              {{ valores[tipo.tipo].length > 1 ? `${tipo.label} ${indice + 1}` : tipo.label }}
-            </label>
-            <div class="d-flex gap-2">
-              <input
-                :id="`contacto-${tipo.tipo}-${indice}`"
-                v-model="fila.valor"
-                class="form-control"
-                :placeholder="tipo.placeholder"
-                :type="tipo.tipo === 'telefono' || tipo.tipo === 'whatsapp' ? 'tel' : tipo.tipo === 'email' ? 'email' : 'text'"
-                maxlength="255"
-                autocomplete="off"
-                :aria-describedby="`contacto-ayuda-${tipo.tipo}`"
-              />
-              <button
-                v-if="valores[tipo.tipo].length > 1"
-                type="button"
-                class="btn btn-danger"
-                :aria-label="`Quitar ${tipo.label} ${indice + 1}`"
-                :title="`Quitar ${tipo.label} ${indice + 1}`"
-                @click="quitar(tipo.tipo, indice)"
-              >
-                <i class="bi bi-trash" aria-hidden="true"></i>
-              </button>
+      <div v-for="c in contactos" :key="c.key" class="col">
+        <div class="card h-100 contacto-card">
+          <div class="card-body d-flex flex-column gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <span class="contacto-marca" :style="estiloMarca(c.tipo)">
+                <i :class="['bi', definicion(c.tipo).icono]" aria-hidden="true"></i>
+              </span>
+              <span class="fw-semibold">{{ definicion(c.tipo).label }}</span>
             </div>
-            <div class="form-check form-switch mt-2">
-              <input
-                :id="`contacto-visible-${tipo.tipo}-${indice}`"
-                v-model="fila.visible"
-                class="form-check-input"
-                type="checkbox"
-                :disabled="!fila.valor"
-              />
-              <label class="form-check-label" :for="`contacto-visible-${tipo.tipo}-${indice}`">
-                Mostrar en mi perfil
-              </label>
-            </div>
-          </div>
 
-          <div :id="`contacto-ayuda-${tipo.tipo}`" class="form-text mb-2">{{ tipo.ayuda }}</div>
-          <button
-            v-if="valores[tipo.tipo].length < maxPorTipo"
-            type="button"
-            class="btn btn-success btn-sm"
-            @click="agregar(tipo.tipo)"
-          >
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar otro {{ tipo.label }}
-          </button>
+            <div class="contacto-valor text-break">
+              <a v-if="enlace(c)" :href="enlace(c)" :target="abreEnPestana(c) ? '_blank' : null"
+                 :rel="abreEnPestana(c) ? 'noopener noreferrer' : null">{{ c.valor }}</a>
+              <span v-else>{{ c.valor }}</span>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
+              <div class="form-check form-switch mb-0">
+                <input :id="`contacto-visible-${c.key}`" v-model="c.visible" class="form-check-input" type="checkbox" role="switch"
+                       @change="programarGuardado()">
+                <label class="form-check-label small" :for="`contacto-visible-${c.key}`">Mostrar en mi perfil</label>
+              </div>
+              <div class="d-flex gap-1">
+                <button type="button" class="btn btn-outline-primary btn-sm" :aria-label="`Editar ${definicion(c.tipo).label}`"
+                        :title="`Editar ${definicion(c.tipo).label}`" @click="abrirModal(c)">
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" :aria-label="`Eliminar ${definicion(c.tipo).label}`"
+                        :title="`Eliminar ${definicion(c.tipo).label}`" @click="confirmarEliminar(c)">
+                  <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <p class="form-text mb-0 mt-3" role="status">{{ guardando ? 'Guardando…' : mensaje }}</p>
-
-    <div class="card contacto-card mt-4">
-      <div class="card-body">
-        <h6>Así se ven en tu perfil</h6>
-        <p class="text-muted small">
-          Los vecinos ven sólo los datos que marcaste como visibles. Cada icono abre el
-          sitio correspondiente en una pestaña nueva. La vista previa se actualiza al guardar.
-        </p>
-        <ContactosPerfil :contactos="contactosVisibles" con-etiqueta />
-      </div>
-    </div>
+    <p class="form-text mt-3 mb-0" role="status" aria-live="polite">{{ estado }}</p>
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { AppStore } from '../../stores/app'
 import { obtener_mis_contactos, guardar_mis_contactos } from '../../api/negocio'
-import { TIPOS_CONTACTO } from '../../data/contactos'
-import ContactosPerfil from './ContactosPerfil.vue'
+import { TIPOS_CONTACTO, definicionContacto, urlSegura } from '../../data/contactos'
+import FormularioContactoModal from './FormularioContactoModal.vue'
 
-const DEBOUNCE_GUARDADO_MS = 800
-// Mismo tope que valida el backend (MAX_POR_TIPO en utils/contactos.js)
+// Mismo tope que valida el backend (MAX_POR_TIPO en helpers/contactos.js)
 const MAX_POR_TIPO = 10
-const filaVacia = () => ({ valor: '', visible: true })
+const DEBOUNCE_GUARDADO_MS = 800
 
-export default {
-  name: 'ContactosForm',
-  components: { ContactosPerfil },
-  props: {
-    // Contactos ya cargados por la vista (evita una segunda llamada al API)
-    contactos: { type: Array, default: null },
-  },
-  emits: ['guardado'],
-  data() {
-    return {
-      tipos: TIPOS_CONTACTO,
-      maxPorTipo: MAX_POR_TIPO,
-      // { [tipo]: [{ valor, visible }] } — cada tipo admite varios datos
-      valores: Object.fromEntries(TIPOS_CONTACTO.map((t) => [t.tipo, [filaVacia()]])),
-      // Última versión guardada, con la URL que armó el backend: es lo que se
-      // previsualiza (y lo que realmente ve el cliente)
-      guardados: [],
-      guardando: false,
-      mensaje: '',
-      // Se activa recién cuando terminó de aplicar los contactos cargados, para no
-      // autoguardar por la asignación inicial de los campos.
-      listoParaAutoguardar: false,
-      temporizadorGuardado: null,
-    }
-  },
-  computed: {
-    // Previsualización: lo mismo que verá el cliente en el perfil público
-    contactosVisibles() {
-      return this.guardados.filter((c) => c.visible !== false)
-    },
-  },
-  async created() {
-    if (!Array.isArray(this.contactos)) await this.cargar()
-  },
-  beforeUnmount() {
-    clearTimeout(this.temporizadorGuardado)
-  },
-  watch: {
-    contactos: {
-      immediate: true,
-      handler(nuevos) {
-        if (Array.isArray(nuevos)) {
-          this.aplicar(nuevos)
-          this.$nextTick(() => {
-            this.listoParaAutoguardar = true
-          })
-        }
-      },
-    },
-    valores: {
-      deep: true,
-      handler() {
-        this.programarGuardado()
-      },
-    },
-  },
-  methods: {
-    estiloMarca(tipo) {
-      return tipo.degradado ? { background: tipo.degradado } : { backgroundColor: tipo.color }
-    },
-    agregar(tipo) {
-      if (this.valores[tipo].length < MAX_POR_TIPO) this.valores[tipo].push(filaVacia())
-    },
-    quitar(tipo, indice) {
-      this.valores[tipo].splice(indice, 1)
-      if (this.valores[tipo].length === 0) this.valores[tipo].push(filaVacia())
-    },
-    aplicar(contactos) {
-      this.guardados = contactos
-      for (const t of this.tipos) {
-        const filas = contactos
-          .filter((c) => c.tipo === t.tipo)
-          .map((c) => ({ valor: c.valor || '', visible: c.visible === true }))
-        // Si había un campo vacío recién agregado (todavía sin completar) se conserva,
-        // para que el autoguardado de otro campo no lo haga desaparecer.
-        const previas = this.valores[t.tipo] || []
-        const habiaVacio = previas.length > 1 && previas.some((f) => !f.valor.trim())
-        if (filas.length === 0 || (habiaVacio && filas.length < MAX_POR_TIPO)) filas.push(filaVacia())
-        this.valores[t.tipo] = filas
-      }
-    },
-    async cargar() {
-      try {
-        const body = await obtener_mis_contactos()
-        this.aplicar(body.contactos || [])
-      } catch {
-        AppStore().mostrar_alerta('No se pudieron cargar los datos de contacto')
-      } finally {
-        this.$nextTick(() => {
-          this.listoParaAutoguardar = true
-        })
-      }
-    },
-    // Autoguardado con debounce: espera a que el usuario deje de tipear antes de guardar.
-    programarGuardado() {
-      if (!this.listoParaAutoguardar) return
-      clearTimeout(this.temporizadorGuardado)
-      this.temporizadorGuardado = setTimeout(this.guardar, DEBOUNCE_GUARDADO_MS)
-    },
-    async guardar() {
-      this.mensaje = ''
-      this.guardando = true
-      try {
-        const payload = {
-          // Formulario completo: cada tipo va con todos sus datos (un tipo que viaja
-          // sólo con valores vacíos se borra)
-          contactos: this.tipos.flatMap((t) =>
-            this.valores[t.tipo].map((f) => ({ tipo: t.tipo, valor: f.valor.trim(), visible: f.visible }))
-          ),
-        }
-        const body = await guardar_mis_contactos(payload.contactos)
-        // El backend devuelve los valores normalizados y la URL de cada enlace
-        this.listoParaAutoguardar = false
-        this.aplicar(body.contactos || [])
-        this.$nextTick(() => {
-          this.listoParaAutoguardar = true
-        })
-        this.mensaje = body.message || 'Datos de contacto guardados'
-        this.$emit('guardado', body.contactos || [])
-      } catch (err) {
-        AppStore().mostrar_alerta(err.response?.data?.error || 'No se pudieron guardar los datos de contacto')
-      } finally {
-        this.guardando = false
-      }
-    },
-  },
+const storeApp = AppStore()
+const contactos = ref([]) // [{ key, tipo, valor, visible, url }]
+const cargando = ref(true)
+const estado = ref('')
+let siguienteKey = 0
+let temporizador = null
+
+const definicion = (tipo) => definicionContacto(tipo) || { label: tipo, icono: 'bi-link-45deg', color: '#6c757d' }
+const estiloMarca = (tipo) => {
+  const def = definicion(tipo)
+  return def.degradado ? { background: def.degradado } : { backgroundColor: def.color }
 }
+
+// El teléfono se muestra como texto; el resto enlaza al perfil o al chat (ya armado por el backend)
+function enlace(c) {
+  if (c.tipo === 'telefono') return null
+  return urlSegura(c.url)
+}
+// mailto/tel no necesitan pestaña nueva; el resto sí
+const abreEnPestana = (c) => /^https?:/i.test(enlace(c) || '')
+
+function aEntrada(c) {
+  return { key: ++siguienteKey, tipo: c.tipo, valor: c.valor || '', visible: c.visible === true, url: c.url || null }
+}
+
+async function cargar() {
+  try {
+    const body = await obtener_mis_contactos()
+    contactos.value = (body.contactos || []).map(aEntrada)
+  } catch {
+    storeApp.mostrar_alerta('No se pudieron cargar los datos de contacto')
+  } finally {
+    cargando.value = false
+  }
+}
+
+// Guarda la lista completa: el backend reemplaza cada tipo enviado. Ante un error recarga
+// desde el servidor para mostrar lo que realmente quedó guardado.
+async function guardar() {
+  clearTimeout(temporizador)
+  estado.value = 'Guardando…'
+  try {
+    const body = await guardar_mis_contactos(
+      contactos.value.map((c) => ({ tipo: c.tipo, valor: String(c.valor || '').trim(), visible: c.visible === true }))
+    )
+    contactos.value = (body.contactos || []).map(aEntrada)
+    estado.value = body.message || 'Datos de contacto guardados'
+    return true
+  } catch (err) {
+    estado.value = ''
+    storeApp.mostrar_alerta(err.response?.data?.error || 'No se pudieron guardar los datos de contacto')
+    await cargar()
+    return false
+  }
+}
+
+// Cambios de visibilidad: autoguardado con debounce
+function programarGuardado() {
+  clearTimeout(temporizador)
+  temporizador = setTimeout(guardar, DEBOUNCE_GUARDADO_MS)
+}
+
+async function confirmarEliminar(c) {
+  storeApp.mostrar_confirm({
+    title: 'Eliminar dato de contacto',
+    text: `Se quitará ${definicion(c.tipo).label}: ${c.valor}. ¿Continuar?`,
+    severity_confirmar: 'danger',
+    confirmar_accion: async () => {
+      contactos.value = contactos.value.filter((x) => x.key !== c.key)
+      await guardar()
+    },
+  })
+}
+
+// Modal de dos pasos (tipo y dato). Devuelve true si se guardó, para que el modal se cierre.
+function abrirModal(contacto = null) {
+  const llenos = TIPOS_CONTACTO.map((t) => t.tipo).filter((tipo) => contactos.value.filter((c) => c.tipo === tipo).length >= MAX_POR_TIPO)
+  const modal_form = storeApp.mostrar_modal(
+    FormularioContactoModal,
+    contacto ? 'Editar dato de contacto' : 'Agregar red o contacto',
+    {
+      contacto,
+      llenos,
+      _callback_guardar: (tipo, valor) => {
+        const anterior = contactos.value
+        contactos.value = contacto
+          ? anterior.map((c) => (c.key === contacto.key ? { ...c, tipo, valor, url: null } : c))
+          : [...anterior, { key: ++siguienteKey, tipo, valor, visible: true, url: null }]
+        return guardar()
+      },
+      _cerrar: () => storeApp.ocultar_modal(modal_form.code),
+    },
+  )
+}
+
+onMounted(cargar)
+onBeforeUnmount(() => clearTimeout(temporizador))
 </script>
 
 <style scoped>
