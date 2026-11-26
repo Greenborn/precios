@@ -786,7 +786,17 @@ def procesar_articulo(articulo, fecha_registro=None):
         
         # Procesar precio
         resultado = procesa_precio(cursor, conexion, producto, articulo, fecha_registro)
-        
+
+        # Vincular la categoría con el local (branch_category). Si ya existe, refresca actualizado_el
+        if resultado:
+            ahora = datetime.now()
+            cursor.execute("""
+                INSERT INTO branch_category (branch_id, category_id, creado_el, actualizado_el)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE actualizado_el = VALUES(actualizado_el)
+            """, (articulo['branch_id'], categoria['id'], ahora, ahora))
+            conexion.commit()
+
         cursor.close()
         conexion.close()
         

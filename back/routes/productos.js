@@ -202,6 +202,25 @@ async function registrar_precio_usuario(usuario, product_id, branch_id, price, f
         const nuevo_id = insert.id
         await trx('price').insert( insert )
 
+        // Vincular las categorías del producto con el local (branch_category).
+        // Si la relación ya existe se refresca actualizado_el; si no, se crea.
+        const categorias_producto = await trx('product_category')
+            .where('product_id', product_id).select('category_id')
+        if (categorias_producto.length) {
+            const ahora = new Date()
+            const categorias = [...new Set(categorias_producto.map(r => String(r.category_id)))]
+            const existentes = new Set(
+                (await trx('branch_category').where('branch_id', branch_id).whereIn('category_id', categorias).select('category_id'))
+                    .map(r => String(r.category_id))
+            )
+            const nuevas = categorias.filter(c => !existentes.has(c))
+                .map(c => ({ branch_id: branch_id, category_id: c, creado_el: ahora, actualizado_el: ahora }))
+            if (nuevas.length) await trx('branch_category').insert(nuevas)
+            if (existentes.size)
+                await trx('branch_category').where('branch_id', branch_id)
+                    .whereIn('category_id', [...existentes]).update({ actualizado_el: ahora })
+        }
+
         // Limpiar price_today (misma ventana hoy+ayer)
         await trx('price_today').where('date_time', '<', AYER)
             .whereNotIn('branch_id', trx('branch').select('id').whereNotNull('propietario_id')).del()
