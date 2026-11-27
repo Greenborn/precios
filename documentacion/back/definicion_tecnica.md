@@ -177,6 +177,38 @@ CREATE TABLE price_today (
 
 **Propósito**: Caché del último precio (últimos 30 días). Actualizado cada 24h.
 
+### Tabla `precios_negocio` (copia de precios de negocio)
+
+Migración: `back/migrations/20261127120000_precios_negocio.js` (versión 1.8.37).
+
+```sql
+CREATE TABLE precios_negocio (
+  id VARCHAR(36) PRIMARY KEY,           -- mismo id que price.id (uuid v7)
+  usuario_id INT UNSIGNED NOT NULL,     -- autor (usuarios.id, con es_negocio = 1)
+  product_id VARCHAR(64) NOT NULL,
+  branch_id INT NOT NULL,
+  price DECIMAL(14,2) NOT NULL,
+  date_time DATETIME NOT NULL,
+  notas VARCHAR(255) NULL,
+  creado_el TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_el TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX precios_negocio_usuario_fecha_idx (usuario_id, date_time),
+  INDEX precios_negocio_producto_local_idx (product_id, branch_id)
+);
+```
+
+**Propósito**: lectura rápida de "mis precios" (`GET /api/negocio/mis-precios`) sin recorrer `price`.
+
+**Escritura**:
+- `registrar_precio_usuario` (`routes/productos.js`) inserta en `price` **y** aquí, en la misma transacción, sólo si el usuario tiene `es_negocio = 1`.
+- `PUT` / `DELETE /api/negocio/mis-precios/:id` actualizan o borran la fila junto con `price` y `price_today`.
+- `DELETE /api/negocio/mi-cuenta/datos` borra las filas por `usuario_id` y por `branch_id` de los locales del usuario.
+
+**Backfill**: la migración copia el histórico de `price` de usuarios con `es_negocio = 1` (`NOT EXISTS` por `id`, es re-ejecutable).
+
+**Relación**: `id` = `price.id`; no hay FK declarada. Es una copia duplicada: los precios siguen en `price`, `price_today` y buscador.
+
 ### Tabla `branch` (Sucursales)
 
 ```sql

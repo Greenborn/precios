@@ -29,6 +29,7 @@ var paths = [
   { path: "/user/logout" },
   { path: "/user/info" },
   { path: "/user/guardar_config" },
+  { path: "/user/cambiar_password" },
   { path: "/user/get_all", permisos: ["usuarios.ver"] },
   { path: "/user/add_one", permisos: ["usuarios.crear"] },
   { path: "/user/put_one", permisos: ["usuarios.editar"] },

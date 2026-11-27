@@ -10,7 +10,7 @@
   import AbmShell from '@/components/admin/shared/AbmShell.vue'
   import { ref, onMounted } from 'vue';
   import  FormularioGenerico  from '@/components/genericos/FormularioGenerico'
-  import { guardarConfig } from '@/api/admin/userAdmin'
+  import { guardarConfigCompleto } from '@/api/admin/userAdmin'
   import { getUserInfo } from '@/utils/auth'
   import { AppStore } from '@/stores/app'
 
@@ -37,7 +37,7 @@
   ])
 
   const config_formulario = ref({
-    "onSubmit": guardarConfig, 
+    "onSubmit": guardarConfigCompleto, 
     "guardado": configuracion_guardada, 
     "modelo": formulario_config.value,
     "campos": campos_form_config.value,

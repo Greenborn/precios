@@ -19,6 +19,7 @@ Documentación completa de todos los endpoints REST disponibles en la API de Pre
 3. [Productos](#productos)
 4. [Importación](#importación)
 5. [Comercios](#comercios)
+   - [Precios de negocio](#precios-de-negocio-área-privada)
 6. [Análisis y Estadísticas](#análisis-y-estadísticas)
 7. [Respuestas Estándar](#respuestas-estándar)
 
@@ -625,6 +626,145 @@ POST /admin/comercios
 
 ---
 
+## 💼 Precios de Negocio (área privada)
+
+Rutas del área de negocio, montadas bajo `/api` (`back/server.js` → `app_API.use("/api", require("./routes/negocio"))`).
+Requieren sesión (`x-api-key` o `Authorization: Bearer`) y que la cuenta tenga `es_negocio = 1`.
+
+> Nota: `sesion_negocio` responde 401 sin sesión y 403 si la cuenta no es de negocio. Estos endpoints usan `{ "error": "..." }` (no `stat`/`text`) para errores.
+
+Tabla de datos: `precios_negocio` (ver [definición técnica](../definicion_tecnica.md#tabla-precios_negocio)).
+
+### Mis precios (listado)
+**GET** `/api/negocio/mis-precios?limit=50&offset=0`
+
+#### Headers
+```http
+x-api-key: <token de sesión>
+```
+
+#### Parámetros (query)
+| Campo | Tipo | Requerido | Reglas |
+|-------|------|-----------|--------|
+| `limit` | number | No | 1 a 200 (default 50) |
+| `offset` | number | No | ≥ 0 (default 0) |
+
+Devuelve, por cada (producto, local), **sólo el último precio cargado por el usuario logueado**. Lee `precios_negocio` filtrando por `usuario_id = req.user.id`; el `usuario_id` de la query se ignora.
+
+#### Respuesta Exitosa (200)
+```json
+{
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "id": "0190f3c2-7d1e-7a2b-9c3d-4e5f6a7b8c9d",
+      "producto_id": "uuid-del-producto",
+      "producto": "Arroz Gallo 1Kg",
+      "precio": 1250,
+      "fecha": "2026-11-26T10:15:00.000Z",
+      "local_id": 5,
+      "local": "Sucursal Centro"
+    }
+  ]
+}
+```
+
+#### Respuestas de Error
+| Código HTTP | Situación | Respuesta |
+|-------------|-----------|-----------|
+| 401 | Sin sesión | `{ "error": "No hay sesión activa", "code": "DO_LOGIN" }` |
+| 403 | Cuenta no marcada como negocio | `{ "error": "Tu cuenta no está configurada como negocio", "code": "NO_NEGOCIO" }` |
+| 404 | No aplica (listado vacío devuelve `items: []`) | — |
+| 422 | No se usa (parámetros inválidos se normalizan con defaults) | — |
+| 500 | Error de base de datos | Mensaje genérico del back (detalle sólo en log) |
+
+#### Características
+- **Lectura directa** de `precios_negocio` (sin recorrer `price`).
+- Ordenado por nombre de producto, local y `id`.
+
+---
+
+### Editar precio propio
+**PUT** `/api/negocio/mis-precios/:id`
+
+#### Headers
+```http
+x-api-key: <token de sesión>
+Content-Type: application/json
+```
+
+#### Parámetros
+| Campo | Ubicación | Tipo | Requerido | Reglas |
+|-------|-----------|------|-----------|--------|
+| `id` | path | string | Sí | `[A-Za-z0-9-]`, hasta 36 caracteres (id del precio) |
+| `precio` | body | number | Sí | Mayor que 0, máximo `999999999.99`, hasta 2 decimales; acepta coma decimal |
+
+```json
+{ "precio": 1300 }
+```
+
+#### Respuesta Exitosa (200)
+```json
+{ "stat": true, "data": { "id": "0190f3c2-7d1e-7a2b-9c3d-4e5f6a7b8c9d", "precio": 1300 } }
+```
+
+#### Efectos
+- Actualiza `precios_negocio`, `price` (histórico) y `price_today` si el precio es el vigente.
+- Sincroniza buscador y cachés en memoria (`agregar_a_buscador`, `sync_cache.actualizar_precio`).
+- Todo en transacción sobre la base; la sincronización de caché ocurre después.
+
+#### Respuestas de Error
+| Código HTTP | Situación | Respuesta |
+|-------------|-----------|-----------|
+| 400 | `id` con formato inválido | `{ "error": "Identificador de precio inválido" }` |
+| 401 | Sin sesión | `{ "error": "No hay sesión activa", "code": "DO_LOGIN" }` |
+| 403 | Cuenta no es de negocio | `{ "error": "Tu cuenta no está configurada como negocio", "code": "NO_NEGOCIO" }` |
+| 404 | El precio no existe o es de otro usuario (no se revela cuál) | `{ "error": "Precio no encontrado" }` |
+| 422 | Precio no válido (no numérico, ≤ 0, > máximo, más de 2 decimales) | `{ "error": "El precio debe ser un número positivo con hasta 2 decimales" }` |
+| 500 | Error interno | `{ "error": "No se pudo editar el precio" }` |
+
+#### Características
+- **Propiedad**: se verifica en el servidor (`usuario_id = req.user.id`). `usuario_id` del body no se acepta.
+
+---
+
+### Eliminar precio propio
+**DELETE** `/api/negocio/mis-precios/:id`
+
+#### Headers
+```http
+x-api-key: <token de sesión>
+```
+
+#### Parámetros
+| Campo | Ubicación | Tipo | Requerido | Reglas |
+|-------|-----------|------|-----------|--------|
+| `id` | path | string | Sí | Mismo formato que en PUT |
+
+#### Respuesta Exitosa (200)
+```json
+{ "stat": true, "data": { "id": "0190f3c2-7d1e-7a2b-9c3d-4e5f6a7b8c9d" } }
+```
+
+#### Efectos
+- Borra la fila en `precios_negocio`, en `price` y, si era el vigente, restaura en `price_today` el precio anterior (misma lógica que `eliminar_precio` de `/admin/precios_comunitarios`).
+- Quita o actualiza buscador y cachés en memoria.
+- Si la fila existe en `precios_negocio` pero no en `price` (inconsistencia previa), sólo se limpia la copia.
+
+#### Respuestas de Error
+| Código HTTP | Situación | Respuesta |
+|-------------|-----------|-----------|
+| 400 | `id` con formato inválido | `{ "error": "Identificador de precio inválido" }` |
+| 401 | Sin sesión | `{ "error": "No hay sesión activa", "code": "DO_LOGIN" }` |
+| 403 | Cuenta no es de negocio | `{ "error": "Tu cuenta no está configurada como negocio", "code": "NO_NEGOCIO" }` |
+| 404 | No existe o es de otro usuario | `{ "error": "Precio no encontrado" }` |
+| 422 | No se usa | — |
+| 500 | Error interno | `{ "error": "No se pudo eliminar el precio" }` |
+
+---
+
 ## 📊 Análisis y Estadísticas
 
 ### Incremento Acumulado de Precios
@@ -897,9 +1037,27 @@ Si la sesión inició por SSO, el frontend envía en el body `sso_token` (bearer
 ### 1.5 Actualizar Cuenta Propia
 **PUT** `/admin/user/guardar_config`
 
-#### Body
+> La contraseña **no** se cambia aquí (un `pass` en el body se ignora). Para cambiarla usar [1.6](#16-cambiar-contraseña-propia).
+
+#### Headers
+```http
+x-api-key: <token de sesión>
+Content-Type: application/json
+```
+
+#### Parámetros (body)
+| Campo | Tipo | Requerido | Reglas |
+|-------|------|-----------|--------|
+| `id` | number | No | Si se envía debe ser el id de la sesión; si no, responde error `No autorizado` |
+| `name` | string | No | 2 a 64 caracteres (se recorta espacios) |
+| `apellido` | string \| null | No | Máximo 128 caracteres; vacío guarda `null` |
+| `email` | string | No | Formato `algo@dominio.ext`, 5 a 255 caracteres, único entre usuarios |
+| `es_negocio` | boolean | No | Marca la cuenta como negocio |
+
+Al menos un campo debe venir; si no, responde `No hay datos para actualizar`.
+
 ```json
-{ "id": 1, "name": "Administrador", "email": "admin@admin.com", "pass": "nueva_clave" }
+{ "name": "Ana", "apellido": "Pérez", "email": "ana@example.com" }
 ```
 
 #### Respuesta Exitosa (200)
@@ -907,9 +1065,76 @@ Si la sesión inició por SSO, el frontend envía en el body `sso_token` (bearer
 { "stat": true, "data": { "message": "Cuenta actualizada correctamente" } }
 ```
 
+#### Respuestas de Error
+Los errores de validación responden **HTTP 200** con `stat: false` (convención de `userAdmin`):
+
+| Código HTTP | Situación | Respuesta |
+|-------------|-----------|-----------|
+| 200 | Nombre fuera de rango | `{ "stat": false, "text": "El nombre debe tener entre 2 y 64 caracteres" }` |
+| 200 | Apellido > 128 | `{ "stat": false, "text": "El apellido no puede superar 128 caracteres" }` |
+| 200 | Email con formato inválido | `{ "stat": false, "text": "El email no tiene un formato válido" }` |
+| 200 | Email ya usado por otra cuenta | `{ "stat": false, "text": "El email ya está en uso" }` |
+| 200 | Body sin campos | `{ "stat": false, "text": "No hay datos para actualizar" }` |
+| 200 | `id` ajeno | `{ "stat": false, "text": "No autorizado" }` |
+| 401 | Sin sesión | `{ "stat": false, "text": "No hay sesion activa", "code": "DO_LOGIN" }` (200, mismo formato) |
+| 403 | Sin permiso `perfil.editar` | Respuesta del middleware de RBAC |
+| 404 | No aplica (la ruta siempre existe para el usuario logueado) | — |
+| 422 | No se usa: los datos inválidos responden 200 con `stat: false` | — |
+| 500 | Error inesperado | `{ "stat": false, "text": "..." }` (el detalle se registra sólo en el log del back) |
+
 #### Características
-- **Autenticación**: Requerida. Solo permite editar la propia cuenta.
+- **Autenticación**: Requerida. Solo permite editar la propia cuenta (`req.session.u_data`).
 - **Permisos**: `perfil.editar`
+- **Autoguardado**: el front envía sólo `name`, `apellido` y `email` (con debounce).
+
+---
+
+### 1.6 Cambiar Contraseña Propia
+**PUT** `/admin/user/cambiar_password`
+
+#### Headers
+```http
+x-api-key: <token de sesión>
+Content-Type: application/json
+```
+
+#### Parámetros (body)
+| Campo | Tipo | Requerido | Reglas |
+|-------|------|-----------|--------|
+| `pass` | string | Sí | 8 a 128 caracteres, al menos una letra y un número, distinta al email y al nombre de la cuenta (sin distinguir mayúsculas) |
+| `pass_repeat` | string | Sí | Debe ser idéntica a `pass` |
+
+No se pide la contraseña actual (decisión D2 del plan 1.8.37). La contraseña se guarda con `bcrypt` (costo 10) y nunca se devuelve ni se registra en logs.
+
+```json
+{ "pass": "Clave2026", "pass_repeat": "Clave2026" }
+```
+
+#### Respuesta Exitosa (200)
+```json
+{ "stat": true, "data": { "message": "Contraseña actualizada correctamente" } }
+```
+
+La sesión actual no se cierra.
+
+#### Respuestas de Error
+Igual que 1.5, los errores de validación responden **HTTP 200** con `stat: false`:
+
+| Código HTTP | Situación | Respuesta |
+|-------------|-----------|-----------|
+| 200 | `pass` y `pass_repeat` distintas | `{ "stat": false, "text": "Las contraseñas no coinciden" }` |
+| 200 | Regla incumplida | `{ "stat": false, "text": "La contraseña debe tener al menos 8 caracteres" }` (o: `... no puede superar 128 caracteres`, `... debe incluir al menos una letra`, `... debe incluir al menos un número`, `... no puede ser igual al email`, `... no puede ser igual al nombre`, `La contraseña es requerida`) |
+| 401 | Sin sesión | `{ "stat": false, "text": "No hay sesion activa", "code": "DO_LOGIN" }` (HTTP 200) |
+| 403 | Sin permiso de la ruta | Respuesta del middleware de RBAC |
+| 404 | No aplica | — |
+| 422 | No se usa: las validaciones responden 200 con `stat: false` | — |
+| 500 | Error al guardar | `{ "stat": false, "text": "No se pudo cambiar la contraseña" }` (HTTP 200; el detalle no se expone) |
+
+#### Características
+- **Autenticación**: Requerida. Cambia sólo la contraseña de la sesión.
+- **Validación**: en back (`back/helpers/password_reglas.js`) y en front (modal de cambio).
+
+---
 
 ### 2. Gestión de Usuarios (`/admin/user/*`)
 

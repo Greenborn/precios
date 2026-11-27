@@ -71,6 +71,16 @@ export function listar_mis_precios({ limit = 50, offset = 0 } = {}) {
   return http.get('/api/negocio/mis-precios', { params: { limit, offset } }).then((r) => r.data)
 }
 
+// Edita el precio propio (sólo el precio). El back valida propiedad y rango.
+export function editar_mi_precio(id, precio) {
+  return http.put(`/api/negocio/mis-precios/${encodeURIComponent(id)}`, { precio }).then((r) => r.data)
+}
+
+// Elimina un precio propio (también del histórico y del buscador).
+export function eliminar_mi_precio(id) {
+  return http.delete(`/api/negocio/mis-precios/${encodeURIComponent(id)}`).then((r) => r.data)
+}
+
 // Portada y foto de perfil del negocio (tipo: 'portada' | 'foto')
 export function obtener_mis_imagenes_perfil() {
   return http.get('/api/negocio/mi-perfil/imagenes').then((r) => r.data)

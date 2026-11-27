@@ -203,6 +203,21 @@ async function registrar_precio_usuario(usuario, product_id, branch_id, price, f
         const nuevo_id = insert.id
         await trx('price').insert( insert )
 
+        // Usuarios con perfil de negocio: copia duplicada en precios_negocio (misma transacción)
+        if (usuario?.es_negocio) {
+            await trx('precios_negocio').insert({
+                "id": nuevo_id,
+                "usuario_id": usuario.id,
+                "product_id": product_id,
+                "branch_id": branch_id,
+                "price": price,
+                "date_time": AHORA,
+                "notas": notas,
+                "creado_el": new Date(),
+                "actualizado_el": new Date()
+            })
+        }
+
         // Vincular las categorías del producto con el local (branch_category).
         // Si la relación ya existe se refresca actualizado_el; si no, se crea.
         const categorias_producto = await trx('product_category')

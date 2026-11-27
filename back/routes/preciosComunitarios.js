@@ -167,3 +167,6 @@ router.use(createCrudRouter({
   ],
   logger: console,
 }))
+
+// Expuesto para el área de negocio (DELETE /negocio/mis-precios/:id), que valida la propiedad antes
+module.exports.eliminar_precio = eliminar_precio

@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt')
 const axios = require('axios')
 const { firmar_token, cargar_usuario } = require('../helpers/auth')
 const sso = require('../sso')
+const { validar_password } = require('../helpers/password_reglas')
 
 const FIELDS_DEF_USUARIOS = [
   { field: 'id',       headerName: 'ID',      sortable: true },
@@ -158,28 +159,40 @@ router.post('/logout', async function (req, res) {
   responder_ok(res, { message: 'Sesión cerrada' })
 })
 
-// PUT /guardar_config - editar datos de la propia cuenta
+// PUT /guardar_config - editar datos de la propia cuenta (nombre, apellido, email, es_negocio).
+// La contraseña NO se cambia aquí: usar PUT /cambiar_password.
 router.put('/guardar_config', async function (req, res) {
   const usuario = req.session && req.session.u_data ? req.session.u_data : null
   if (!usuario) return responder_err(res, 'No hay sesion activa', 'DO_LOGIN')
 
-  const { id, name, apellido, email, pass, es_negocio } = req.body || {}
+  const { id, name, apellido, email, es_negocio } = req.body || {}
 
   if (id && Number(id) !== usuario.id) return responder_err(res, 'No autorizado')
 
   const actualizar = {}
-  if (name) actualizar.name = name
-  if (apellido !== undefined) actualizar.apellido = apellido
-  if (email) actualizar.email = email
-  if (es_negocio !== undefined) actualizar.es_negocio = Boolean(es_negocio)
-  if (pass && pass !== '********') {
-    actualizar.pass = await bcrypt.hash(pass, 10)
+  if (name !== undefined) {
+    const n = String(name).trim()
+    if (n.length < 2 || n.length > 64) return responder_err(res, 'El nombre debe tener entre 2 y 64 caracteres')
+    actualizar.name = n
   }
+  if (apellido !== undefined) {
+    const a = String(apellido ?? '').trim()
+    if (a.length > 128) return responder_err(res, 'El apellido no puede superar 128 caracteres')
+    actualizar.apellido = a || null
+  }
+  if (email !== undefined) {
+    const e = String(email).trim()
+    if (e.length < 5 || e.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      return responder_err(res, 'El email no tiene un formato válido')
+    }
+    actualizar.email = e
+  }
+  if (es_negocio !== undefined) actualizar.es_negocio = Boolean(es_negocio)
 
   if (Object.keys(actualizar).length === 0) return responder_err(res, 'No hay datos para actualizar')
 
-  if (email) {
-    const existente = await global.knex('usuarios').where({ email }).whereNot({ id: usuario.id }).first()
+  if (actualizar.email) {
+    const existente = await global.knex('usuarios').where({ email: actualizar.email }).whereNot({ id: usuario.id }).first()
     if (existente) return responder_err(res, 'El email ya está en uso')
   }
 
@@ -189,6 +202,29 @@ router.put('/guardar_config', async function (req, res) {
   } catch (error) {
     console.log('[userAdmin] Error en guardar_config:', error)
     responder_err(res, 'Error al actualizar la cuenta')
+  }
+})
+
+// PUT /cambiar_password - cambia la contraseña de la propia cuenta.
+// body: { pass, pass_repeat }. Valida reglas mínimas y coincidencia en el back.
+router.put('/cambiar_password', async function (req, res) {
+  const usuario = req.session && req.session.u_data ? req.session.u_data : null
+  if (!usuario) return responder_err(res, 'No hay sesion activa', 'DO_LOGIN')
+
+  const { pass, pass_repeat } = req.body || {}
+  if (pass !== pass_repeat) return responder_err(res, 'Las contraseñas no coinciden')
+
+  try {
+    const cuenta = await global.knex('usuarios').where({ id: usuario.id }).first('email', 'name')
+    const error_regla = validar_password(pass, { email: cuenta?.email, name: cuenta?.name })
+    if (error_regla) return responder_err(res, error_regla)
+
+    const hash = await bcrypt.hash(pass, 10)
+    await global.knex('usuarios').where({ id: usuario.id }).update({ pass: hash })
+    responder_ok(res, { message: 'Contraseña actualizada correctamente' })
+  } catch (error) {
+    console.log('[userAdmin] Error en cambiar_password') // no se registra la contraseña
+    responder_err(res, 'No se pudo cambiar la contraseña')
   }
 })
 

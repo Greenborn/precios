@@ -186,12 +186,32 @@
             </h3>
             <div class="table-responsive">
               <table class="table table-sm table-hover align-middle mb-0">
-                <thead class="table-light"><tr><th>Artículo</th><th class="text-end">Precio</th><th class="text-end">Actualizado</th></tr></thead>
+                <thead class="table-light"><tr><th>Artículo</th><th class="text-end">Precio</th><th class="text-end">Actualizado</th><th class="text-end">Acciones</th></tr></thead>
                 <tbody>
-                  <tr v-for="p in g.items" :key="p.producto_id">
+                  <tr v-for="p in g.items" :key="p.id">
                     <td>{{ p.producto }}</td>
-                    <td class="text-end fw-semibold gb-num">{{ formato_moneda(p.precio) }}</td>
+                    <td class="text-end fw-semibold gb-num">
+                      <input v-if="edicion.id === p.id" v-model="edicion.valor" type="text" inputmode="decimal"
+                             class="form-control form-control-sm text-end ms-auto" style="max-width: 8rem"
+                             :aria-label="`Nuevo precio de ${p.producto}`"
+                             @keyup.enter="guardar_edicion(p)" @keyup.esc="cancelar_edicion">
+                      <span v-else>{{ formato_moneda(p.precio) }}</span>
+                    </td>
                     <td class="text-end small gb-text-muted">{{ formato_fecha(p.fecha) }}</td>
+                    <td class="text-end text-nowrap">
+                      <template v-if="edicion.id === p.id">
+                        <button type="button" class="btn btn-sm btn-primary me-1" :disabled="editando" @click="guardar_edicion(p)">Guardar</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelar_edicion">Cancelar</button>
+                      </template>
+                      <template v-else>
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" :aria-label="`Editar precio de ${p.producto}`" @click="iniciar_edicion(p)">
+                          <i class="bi bi-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" :aria-label="`Eliminar precio de ${p.producto}`" @click="eliminar_precio_propio(p)">
+                          <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                      </template>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -227,7 +247,7 @@ import ContactosForm from '../components/publico/ContactosForm.vue'
 import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
-import { http, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios } from '../api/negocio'
+import { http, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios, editar_mi_precio, eliminar_mi_precio } from '../api/negocio'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -276,6 +296,52 @@ async function cargar_mis_precios(reiniciar = false) {
   } finally {
     cargandoPrecios.value = false
   }
+}
+
+// Edición y borrado de precios propios (el back valida que sean del usuario logueado)
+const edicion = reactive({ id: null, valor: '' })
+const editando = ref(false)
+
+function iniciar_edicion(p) {
+  edicion.id = p.id
+  edicion.valor = String(p.precio).replace('.', ',')
+}
+
+function cancelar_edicion() {
+  edicion.id = null
+  edicion.valor = ''
+}
+
+async function guardar_edicion(p) {
+  editando.value = true
+  try {
+    await editar_mi_precio(p.id, edicion.valor)
+    p.precio = Number(String(edicion.valor).trim().replace(',', '.'))
+    cancelar_edicion()
+    storeApp.mostrar_alerta('Precio actualizado')
+  } catch (err) {
+    storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo editar el precio'))
+  } finally {
+    editando.value = false
+  }
+}
+
+function eliminar_precio_propio(p) {
+  storeApp.mostrar_confirm({
+    title: 'Eliminar precio',
+    text: `Se eliminará el precio de ${p.producto} en ${p.local || 'el local'}, también de la búsqueda pública. ¿Continuar?`,
+    severity_confirmar: 'danger',
+    confirmar_accion: async () => {
+      try {
+        await eliminar_mi_precio(p.id)
+        mis_precios.value = mis_precios.value.filter((x) => x.id !== p.id)
+        total_precios.value = Math.max(0, total_precios.value - 1)
+        storeApp.mostrar_alerta('Precio eliminado')
+      } catch (err) {
+        storeApp.mostrar_alerta(mensaje_error(err, 'No se pudo eliminar el precio'))
+      }
+    },
+  })
 }
 
 const TABS = [

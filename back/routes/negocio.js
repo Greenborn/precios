@@ -20,6 +20,8 @@ const sesion_negocio = (req, res, next) => sesion(req, res, (err) => {
 const { createLocalesRepoBranch, createValidarLocalDuplicado } = require('../helpers/locales_branch')
 const cfg = require('../config/negocio')
 const contactos = require('../helpers/contactos')
+const busqueda_productos = require('../controllers/busqueda_productos')
+const sync_cache = require('../controllers/sync_cache')
 
 const router = express.Router()
 const knex = global.knex
@@ -195,9 +197,11 @@ router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
     await knex.transaction(async (trx) => {
       await trx('price_today').where({ user_id: uid }).del()
       await trx('price').where({ user_id: uid }).del()
+      await trx('precios_negocio').where({ usuario_id: uid }).del()
       if (ids.length) {
         await trx('price_today').whereIn('branch_id', ids).del()
         await trx('price').whereIn('branch_id', ids).del()
+        await trx('precios_negocio').whereIn('branch_id', ids).del()
       }
       await trx('articulo_fotos').where({ user_id: uid }).del()
       await trx('perfiles').where({ usuario_id: uid }).del()
@@ -333,35 +337,125 @@ router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion_neg
 
 // ---------- Mis precios (listado privado) ----------
 //   GET /api/negocio/mis-precios?limit&offset -> último precio por producto y local propios
+// ---------- Mis precios (tabla precios_negocio: sólo precios del usuario logueado) ----------
+// Último precio por (producto, local) del usuario. Lectura directa de la tabla propia, sin
+// recorrer price. Sólo devuelve filas con usuario_id = req.user.id.
+const ID_PRECIO = /^[A-Za-z0-9-]{1,36}$/
+const PRECIO_MAX = 999999999.99
+
+// Valida un precio: número positivo, máximo 2 decimales y dentro de rango
+function precio_valido(valor) {
+  const n = Number(String(valor ?? '').trim().replace(',', '.'))
+  if (!Number.isFinite(n) || n <= 0 || n > PRECIO_MAX) return null
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) return null   // más de 2 decimales
+  return Math.round(n * 100) / 100
+}
+
 router.get('/negocio/mis-precios', sesion_negocio, async (req, res) => {
   try {
-    const locales = await knex('branch').where({ propietario_id: req.user.id }).orderBy('id').select('id', 'branch_name')
+    const uid = req.user.id
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200)
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
-    const branchIds = locales.map((l) => l.id)
-    if (!branchIds.length) return res.json({ total: 0, limit, offset, items: [] })
 
-    const nombres = new Map(locales.map((l) => [String(l.id), l.branch_name]))
-    const base = require('../controllers/precios_negocio').consulta_ultimos_precios(knex, branchIds)
-    const [{ n: total }] = await knex.count('* as n').from(base.clone().as('t'))
+    // Último registro por (producto, local): no existe otro más reciente del mismo par
+    const base = knex('precios_negocio as pn')
+      .join('products as p', 'p.id', 'pn.product_id')
+      .join('branch as b', 'b.id', 'pn.branch_id')
+      .where('pn.usuario_id', uid)
+      .whereNotExists(function () {
+        this.select(1).from('precios_negocio as pn2')
+          .whereRaw('pn2.usuario_id = pn.usuario_id AND pn2.product_id = pn.product_id AND pn2.branch_id = pn.branch_id')
+          .andWhere(function () {
+            this.whereRaw('pn2.date_time > pn.date_time')
+              .orWhere(function () { this.whereRaw('pn2.date_time = pn.date_time').andWhereRaw('pn2.id > pn.id') })
+          })
+      })
+
+    const [{ n: total }] = await knex.count('* as n').from(base.clone().select('pn.id').as('t'))
     const filas = await base.clone()
-      .orderBy('products.name').orderBy('price.branch_id').orderBy('price.id')
+      .select('pn.id', 'pn.product_id', 'p.name as product_name', 'pn.price', 'pn.date_time', 'pn.branch_id', 'b.branch_name')
+      .orderBy('p.name').orderBy('pn.branch_id').orderBy('pn.id')
       .limit(limit).offset(offset)
 
     res.json({
       total: Number(total), limit, offset,
       items: filas.map((f) => ({
+        id: f.id,
         producto_id: f.product_id,
         producto: f.product_name,
         precio: Number(f.price),
         fecha: f.date_time,
         local_id: Number(f.branch_id),
-        local: nombres.get(String(f.branch_id)) || null,
+        local: f.branch_name || null,
       })),
     })
   } catch (err) {
     console.error('[negocio] GET mis-precios', err)
     res.status(500).json({ error: 'No se pudieron obtener los precios' })
+  }
+})
+
+// Busca un precio del usuario logueado. Si no es suyo, responde 404 (no revela si existe).
+async function precio_propio(id, usuario_id) {
+  return knex('precios_negocio').where({ id, usuario_id }).first()
+}
+
+// PUT /negocio/mis-precios/:id  body: { precio }  -> edita sólo el precio del propio usuario.
+// Propaga a price (histórico), price_today (si es el vigente) y buscador/caché.
+router.put('/negocio/mis-precios/:id', sesion_negocio, async (req, res) => {
+  const id = String(req.params.id || '')
+  if (!ID_PRECIO.test(id)) return res.status(400).json({ error: 'Identificador de precio inválido' })
+  const precio = precio_valido(req.body?.precio)
+  if (precio === null) return res.status(422).json({ error: 'El precio debe ser un número positivo con hasta 2 decimales' })
+
+  try {
+    const propio = await precio_propio(id, req.user.id)
+    if (!propio) return res.status(404).json({ error: 'Precio no encontrado' })
+
+    await knex.transaction(async (trx) => {
+      await trx('precios_negocio').where({ id, usuario_id: req.user.id }).update({ price: precio, actualizado_el: new Date() })
+      await trx('price').where({ id, user_id: req.user.id }).update({ price: precio })
+      await trx('price_today').where({ price_id: id }).update({ price: precio })
+    })
+
+    // Sincroniza buscador y caches si el precio editado es el vigente
+    const vigente = await knex('price_today').where({ price_id: id }).first()
+    if (vigente) {
+      const producto = await knex('products').where({ id: vigente.product_id }).first('name')
+      const datos = { ...vigente, price: precio, product_name: producto?.name || vigente.product_name || null }
+      busqueda_productos.agregar_a_buscador(datos)
+      await sync_cache.actualizar_precio(datos)
+    }
+
+    res.json({ stat: true, data: { id, precio } })
+  } catch (err) {
+    console.error('[negocio] PUT mis-precios', err)
+    res.status(500).json({ error: 'No se pudo editar el precio' })
+  }
+})
+
+// DELETE /negocio/mis-precios/:id  -> borra el precio propio en precios_negocio, price,
+// price_today (restaurando el anterior) y buscador/caché. Usa la misma lógica que preciosComunitarios.
+router.delete('/negocio/mis-precios/:id', sesion_negocio, async (req, res) => {
+  const id = String(req.params.id || '')
+  if (!ID_PRECIO.test(id)) return res.status(400).json({ error: 'Identificador de precio inválido' })
+
+  try {
+    const propio = await precio_propio(id, req.user.id)
+    if (!propio) return res.status(404).json({ error: 'Precio no encontrado' })
+
+    try {
+      await require('./preciosComunitarios').eliminar_precio(id)
+    } catch (err) {
+      // Si ya no existe en price (inconsistencia previa), sólo se limpia la copia
+      if (!(err && err.status === 404)) throw err
+    }
+    await knex('precios_negocio').where({ id, usuario_id: req.user.id }).del()
+
+    res.json({ stat: true, data: { id } })
+  } catch (err) {
+    console.error('[negocio] DELETE mis-precios', err)
+    res.status(500).json({ error: 'No se pudo eliminar el precio' })
   }
 })
 
