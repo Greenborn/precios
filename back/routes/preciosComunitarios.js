@@ -4,7 +4,8 @@
 //   - Listado: GET /list y GET /:id del paquete (soloLectura), con filtroBase que deja
 //     solo precios cargados por usuarios y joins de lectura.
 //   - Borrado: DELETE /:id propio. No se delega al paquete porque la eliminacion restaura
-//     el precio anterior en price_today y sincroniza buscador y caches en memoria.
+//     el precio anterior (solo si es de hoy o ayer) en price_today, borra la copia de
+//     precios_negocio y sincroniza buscador y caches en memoria.
 //   - Alta y edicion: no existen (soloLectura).
 //
 // Permisos (recurso "precios"): precios.listar, precios.ver, precios.eliminar.
@@ -13,6 +14,8 @@ const { createCrudRouter, ErrorCrud } = require('@greenborn/express-greenborn-cr
 const sso = require('../sso')
 const busqueda_productos = require('../controllers/busqueda_productos')
 const sync_cache = require('../controllers/sync_cache')
+const precios_negocio = require('../controllers/precios_negocio')
+const { quitar_de_caches, sincronizar_precio_negocio } = require('../controllers/sincronizacion_precios')
 
 var router = express.Router()
 module.exports = router
@@ -25,30 +28,18 @@ router.use(function (req, res, next) {
   next()
 })
 
-// Elimina el precio (product_id, branch_id) de las caches en memoria
-// (precios_diccio y products_category_diccio)
-function quitar_de_caches(product_id, branch_id) {
-  const pid = String(product_id)
-  const bid = String(branch_id)
-
-  if (global.precios_diccio[pid]) {
-    global.precios_diccio[pid] = global.precios_diccio[pid].filter(r => String(r.branch_id) !== bid)
-    if (global.precios_diccio[pid].length === 0) delete global.precios_diccio[pid]
-  }
-
-  const cat_ids = global.products_category_diccio.by_product_id[pid] || []
-  for (const cat_id of cat_ids) {
-    const arr = global.products_category_diccio.by_category_id[cat_id]
-    if (arr) {
-      global.products_category_diccio.by_category_id[cat_id] =
-        arr.filter(e => !(String(e.product_id) === pid && String(e.branch_id) === bid))
-    }
-  }
+function inicio_de_ayer() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - 1)
+  return d
 }
 
 // Elimina un precio cargado por un usuario. Si era el precio vigente en price_today,
-// se restaura el precio anterior más reciente del mismo producto+sucursal (o se elimina
-// si no existe otro). Lanza ErrorCrud ante casos de negocio.
+// se restaura el precio anterior más reciente del mismo producto+sucursal solo si es de hoy
+// o ayer; si no, se quita de price_today y de memoria. En locales de negocio la memoria sale
+// de `price`, sin ventana. Borra también la copia de precios_negocio.
+// Lanza ErrorCrud ante casos de negocio.
 async function eliminar_precio(id) {
   const precio = await global.knex('price').where({ id }).first()
   if (!precio) throw new ErrorCrud(404, 'Precio no encontrado')
@@ -62,6 +53,7 @@ async function eliminar_precio(id) {
     const price_today_vigente = await trx('price_today').where({ price_id: id }).first()
 
     await trx('price').where({ id }).del()
+    await trx('precios_negocio').where({ id }).del()
 
     if (price_today_vigente) {
       const anterior = await trx('price')
@@ -69,7 +61,7 @@ async function eliminar_precio(id) {
         .orderBy('date_time', 'desc')
         .first()
 
-      if (anterior) {
+      if (anterior && new Date(anterior.date_time) >= inicio_de_ayer()) {
         const producto_db = await trx('products').where('id', anterior.product_id).first()
         const product_name = producto_db?.name || null
 
@@ -118,7 +110,9 @@ async function eliminar_precio(id) {
   }
 
   // Sincronizar buscador y caches en memoria
-  if (actualizar_buscador && actualizar_buscador.product_name) {
+  if (precios_negocio.es_negocio(precio.branch_id)) {
+    await sincronizar_precio_negocio(precio.product_id, precio.branch_id)
+  } else if (actualizar_buscador && actualizar_buscador.product_name) {
     busqueda_productos.agregar_a_buscador(actualizar_buscador)
     await sync_cache.actualizar_precio(actualizar_buscador)
   } else if (eliminar_buscador) {
@@ -127,10 +121,14 @@ async function eliminar_precio(id) {
   }
 }
 
+// price.id es varchar(36): conviven UUID v7, UUID v1 e ids numericos antiguos. El id se usa
+// siempre como string; comparar la columna con un numero haria que MySQL convierta los ids.
+const ID_PRECIO = /^[A-Za-z0-9-]{1,36}$/
+
 // DELETE /:id - elimina un precio cargado por un usuario
 router.delete('/:id', sso.requirePermission('precios.eliminar'), async function (req, res) {
-  const id = parseInt(req.params.id)
-  if (!id) return res.status(400).json({ status: false, message: 'ID requerido' })
+  const id = String(req.params.id || '')
+  if (!ID_PRECIO.test(id)) return res.status(400).json({ status: false, message: 'Identificador de precio inválido' })
 
   try {
     await eliminar_precio(id)

@@ -4,6 +4,7 @@ const sync_cache = require("./controllers/sync_cache")
 const categorias_cache = require("./controllers/categorias_cache")
 const precios_negocio = require("./controllers/precios_negocio")
 const alias_busqueda_ctrl = require("./controllers/alias_busqueda")
+const sincronizacion_precios = require("./controllers/sincronizacion_precios")
 const { spawn } = require('child_process')
 const path = require('path')
 
@@ -141,7 +142,9 @@ async function regenerar_diccionarios(){
 
     for (let i=0; i < locales.length; i++){
       global.branchs_diccio[Number(locales[i].id)] = locales[i]
-      global.branch_enterprice_diccio[Number(locales[i].enterprise_id)].push( locales[i] )
+      // El local "sin local" resuelve su comercio, pero no integra la lista pública de locales
+      if (!locales[i].sin_local)
+        global.branch_enterprice_diccio[Number(locales[i].enterprise_id)].push( locales[i] )
     }
 
     console.log('[regenerar_diccionarios] Generando diccionarios de productos...')
@@ -261,11 +264,9 @@ async function base_de_datos_iniciada(){
       }
       ph.product_id = String(ph.product_id)
       ph.branch_id = String(ph.branch_id)
-      // Los precios importados por el servicio Python también deben verse en el
-      // buscador en el momento (antes solo se actualizaban las caches de categorías).
-      if (ph.product_name)
-        busqueda_productos.agregar_a_buscador(ph)
-      await sync_cache.actualizar_precio(ph)
+      // Los precios importados por el servicio Python se ven en el momento en buscador y
+      // caches. En locales de negocio se releen de `price`.
+      await sincronizacion_precios.aplicar_precio(ph)
       res.status(200).send({ stat: true })
     } catch (error) {
       console.log("[interno/sync_cache] error", error)
@@ -284,10 +285,10 @@ async function base_de_datos_iniciada(){
   setInterval(purgar_caches_vencidas, 15 * 60 * 1000)
 
   // La actualización de price_today debe ejecutarse manualmente o encolando la tarea
-  // node scripts/recrear_price_today.js o POST /admin/productos/regenerar_price_today (agrega elemento a la cola)
+  // node scripts/recrear_price_today.js o POST /publico/productos/regenerar_price_today (agrega elemento a la cola)
   console.log('[price_today] Para actualizar price_today:')
   console.log('  - Manualmente: node scripts/recrear_price_today.js')
-  console.log('  - Mediante API (encolar): POST /admin/productos/regenerar_price_today con key válida')
+  console.log('  - Mediante API (encolar): POST /publico/productos/regenerar_price_today con sesión y key válida')
 }
 
 // Exportar funciones para uso externo

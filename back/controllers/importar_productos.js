@@ -1,8 +1,10 @@
 require("dotenv").config({ path: '../.env' })
 const uuid = require("uuid")
 const utils = require("../helpers/utils")
-const busqueda_productos = require("./busqueda_productos")
-const sync_cache = require("./sync_cache")
+const { aplicar_precio } = require("./sincronizacion_precios")
+const { validar_precio } = require("../helpers/precio")
+const { validar_fecha_precio } = require("../helpers/fecha_precio")
+const { es_sucursal_negocio, motivo_sucursal_negocio, registrar_descartes_csv } = require("../helpers/importacion")
 
 // Las actualizaciones de buscador/caches en memoria se acumulan en la transacción
 // y se aplican solo si hace commit (evita mostrar precios de un rollback).
@@ -13,8 +15,7 @@ function encolar_sync(trx, precio_hoy) {
 
 async function aplicar_sync(trx) {
     for (const ph of (trx._sync_pendientes || [])) {
-        busqueda_productos.agregar_a_buscador(ph)
-        await sync_cache.actualizar_precio(ph)
+        await aplicar_precio(ph)
     }
     trx._sync_pendientes = []
 }
@@ -281,6 +282,31 @@ async function procesar_articulo(articulo, fecha_registro ){
         const fecha_final = articulo.fecha_registro || fecha_registro;
         if (!fecha_final) {
             return resolve({stat:false, text: 'El campo fecha_registro es obligatorio'})
+        }
+
+        // Rechazar antes de tocar la base lo que no entra en price.price
+        const precio = validar_precio(articulo.price, { redondear: true })
+        if (!precio.ok) {
+            console.log(`Artículo descartado, precio inválido (${String(articulo.price)}): ${articulo.name}`)
+            return resolve({ stat: false, text: `Precio inválido: ${precio.mensaje}` })
+        }
+        articulo.price = precio.precio
+
+        const descartar = (motivo) => {
+            registrar_descartes_csv([{ item: articulo, motivo }])
+            return resolve({ stat: false, text: motivo })
+        }
+        const fecha = validar_fecha_precio(fecha_final)
+        if (!fecha.ok) return descartar(`${fecha.mensaje} (${String(fecha_final)})`)
+        if (articulo.fecha_registro) articulo.fecha_registro = fecha.fecha
+        else fecha_registro = fecha.fecha
+
+        try {
+            const branch = await global.knex('branch').where({ id: articulo.branch_id }).first('propietario_id')
+            if (es_sucursal_negocio(branch)) return descartar(motivo_sucursal_negocio(articulo.branch_id))
+        } catch (error) {
+            console.log(error)
+            return resolve({ stat: false, text: '' })
         }
 
         let trx = await global.knex.transaction()

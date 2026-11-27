@@ -37,8 +37,7 @@ async function main() {
   AYER.setDate(AYER.getDate() - 1)
 
   // 1) Limpiar registros anteriores a ayer
-  const borrados = await knex('price_today').where('date_time', '<', AYER)
-    .whereNotIn('branch_id', knex('branch').select('id').whereNotNull('propietario_id')).del()
+  const borrados = await knex('price_today').where('date_time', '<', AYER).del()
   console.log(`[recrear_price_today] Registros antiguos eliminados de price_today: ${borrados}`)
 
   // 2) Precios más recientes por (product_id, branch_id) dentro de la ventana

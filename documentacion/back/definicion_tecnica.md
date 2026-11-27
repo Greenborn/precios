@@ -175,7 +175,7 @@ CREATE TABLE price_today (
 );
 ```
 
-**Propósito**: Caché del último precio (últimos 30 días). Actualizado cada 24h.
+**Propósito**: caché de precios de hoy y ayer. `price` es `decimal(10,2)`, igual que `price.price` (migración `20261127130000_price_today_price_decimal`, que además recupera desde `price` los valores redondeados por el antiguo `float`). El esquema de arriba es esquemático. En locales de negocio no es fuente de lectura: vale el último registro de `price`.
 
 ### Tabla `precios_negocio` (copia de precios de negocio)
 
@@ -203,7 +203,9 @@ CREATE TABLE precios_negocio (
 **Escritura**:
 - `registrar_precio_usuario` (`routes/productos.js`) inserta en `price` **y** aquí, en la misma transacción, sólo si el usuario tiene `es_negocio = 1`.
 - `PUT` / `DELETE /api/negocio/mis-precios/:id` actualizan o borran la fila junto con `price` y `price_today`.
+- El borrado admin de un precio también borra su copia.
 - `DELETE /api/negocio/mi-cuenta/datos` borra las filas por `usuario_id` y por `branch_id` de los locales del usuario.
+- La baja de un local (`DELETE /api/mis-locales/:id`) borra las filas de su `branch_id`.
 
 **Backfill**: la migración copia el histórico de `price` de usuarios con `es_negocio = 1` (`NOT EXISTS` por `id`, es re-ejecutable).
 
@@ -223,6 +225,14 @@ CREATE TABLE branch (
   INDEX (enterprise_id)
 );
 ```
+
+#### Baja de un local
+
+`eliminar` en `back/helpers/locales_branch.js` (usado por `DELETE /api/mis-locales/:id`, solo para el dueño, y por el borrado de datos de cuenta). Es permanente.
+
+- En una sola transacción borra, por `branch_id`: `price_today` (FK `RESTRICT` hacia `branch`), `price` (histórico completo, de cualquier usuario), `precios_negocio`, `promociones_hoy`, `estadistica_aumento_diario`, `branch_category` y `articulo_fotos`; luego `branch` y, si queda sin locales, `enterprice`.
+- Se conserva `promociones` (archivo histórico de ofertas importadas). No hay limpieza retroactiva de huérfanos previos.
+- Tras confirmar: quita sus precios del buscador, `precios_diccio` y `products_category_diccio`, actualiza los diccionarios de comercios, quita la marca de negocio y borra los archivos `<branch_id>_*` de `uploads/articulos`.
 
 ### Tabla `enterprise` (Empresas)
 
@@ -400,6 +410,12 @@ if elemento:
 Detalle completo en
 [servicio_colas_externo.md](../../back/documentacion/servicio_colas_externo.md).
 
+### Reglas de las importaciones
+
+- **Sucursales de negocio** (`branch.propietario_id` no nulo, incluido "sin local"): las importaciones no escriben sus precios. Se controla en `POST /importar`, en `procesar_articulo()` del worker (antes de cualquier escritura, incluidas las reconfirmaciones) y en `controllers/importar_productos.js`. Es solo por `branch_id`. Las cargas del usuario por la web no cambian. Las ofertas (`promociones`, `promociones_hoy`) no son precios de producto y no se bloquean.
+- **Fechas**: ninguna carga admite fechas posteriores a mañana (Argentina); ver [regla de fechas](endpoints.md#regla-de-fechas-de-las-cargas).
+- Los descartes quedan en `extra_services/logs/descartados.csv`.
+
 ### Validación de Precios
 
 ```javascript
@@ -495,7 +511,6 @@ CREATE FULLTEXT INDEX idx_product_name ON products(name, alias_search);
 
 ## 🔌 Integraciones
 
-- **MercadoLibre** (plataforma: `ml`)
 - **Region20** (propiedades en alquiler)
 
 ---
@@ -657,12 +672,14 @@ La tabla `price_today` está diseñada para contener únicamente los precios cor
 
 - **Limpieza automática al registrar un nuevo precio:**
   - Cada vez que se registra un nuevo precio (ya sea por importación masiva, carga manual o actualización), el controlador ejecuta una limpieza previa de la tabla `price_today`.
-  - Se eliminan todos los registros cuya columna `date_time` sea anterior al inicio del día de ayer (es decir, menor a las 00:00:00 del día anterior).
+  - Se eliminan todos los registros cuya columna `date_time` sea anterior al inicio del día de ayer (es decir, menor a las 00:00:00 del día anterior), incluidos los de locales de negocio.
+  - Los precios de locales de negocio (`branch.propietario_id` no nulo) no dependen de esta tabla: cada escritura (carga, edición, borrado, importación) resincroniza buscador y cachés desde `price` (`controllers/sincronizacion_precios.js`).
+  - La ventana tampoco se les aplica al leer: ni la purga periódica de memoria ni `GET /publico/busqueda/precios` descartan por antigüedad los precios de negocios.
   - Solo después de esta limpieza se inserta/actualiza el nuevo precio correspondiente.
 - **Limpieza periódica (red de seguridad):**
   - El worker de procesamiento (`extra_services/actualizar_precios.py`) ejecuta la misma limpieza al arrancar y periódicamente (dentro de `actualizar_estadisticas`), cubriendo registros que se hayan acumulado fuera del flujo normal.
 - **Regeneración manual / por API:**
-  - El endpoint `POST /admin/productos/regenerar_price_today` encola la tarea `regenerar_precios`, que ejecuta `node scripts/recrear_price_today.js`. Este script borra lo anterior a "ayer" y reconstruye desde `price` el precio más reciente por producto/sucursal de la ventana.
+  - El endpoint `POST /publico/productos/regenerar_price_today` (sesión y `KEY_INT`) encola la tarea `regenerar_precios`, que ejecuta `node scripts/recrear_price_today.js`. Este script borra lo anterior a "ayer" y reconstruye desde `price` el precio más reciente por producto/sucursal de la ventana.
 
 **Ventajas de este enfoque:**
 - La limpieza es centralizada y automática, sin depender del endpoint específico que realice la operación.

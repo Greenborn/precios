@@ -34,5 +34,10 @@ var paths = [
   { path: "/productos/importar", public: true },
   { path: "/productos/importar_alquiler", public: true },
   { path: "/productos/importar_oferta", public: true },
-  { path: "/productos/importar_articulo_plataforma", public: true },
+  // Solo sesion
+  { path: "/busqueda/sugerencias", public: true },
+  { path: "/productos/regenerar_price_today" },
+  { path: "/productos/cargar_nuevo_precio" },
+  { path: "/productos/cargar_precios_formulario" },
+  { path: "/productos/cargar_precios_negocio" },
 ]

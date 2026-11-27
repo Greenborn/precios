@@ -14,11 +14,12 @@ import csv
 import re
 import requests
 import subprocess
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, timezone, date
 from dotenv import load_dotenv
 import mysql.connector
 from mysql.connector import Error
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 from dateutil import parser
 
 
@@ -62,6 +63,10 @@ ERRORES_PERMANENTES = (
     'no se pudo obtener/crear',
     'duplicada',
     'anterior a ayer',
+    'precio inválido',
+    'la fecha no es válida',
+    'posterior a mañana',
+    'sucursal de negocio',
     # errores de integridad de la base (ej. branch_id inexistente): son del dato
     '1452',
     'foreign key constraint',
@@ -74,6 +79,77 @@ CSV_DESCARTADOS = os.getenv(
     'CSV_DESCARTADOS',
     os.path.join(os.path.dirname(__file__), 'logs', 'descartados.csv'))
 CSV_COLUMNAS = ('fecha', 'origen', 'tipo', 'nombre', 'branch_id', 'motivo')
+
+
+# price.price es decimal(10,2): misma regla que back/helpers/precio.js para importadores
+PRECIO_MAX = Decimal('99999999.99')
+FORMATO_PRECIO = re.compile(r'[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)')
+
+
+def normalizar_precio(valor):
+    """Devuelve el precio redondeado a 2 decimales, o None si no es un numero
+    mayor a 0 que entre en la columna."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float, str)):
+        return None
+    if isinstance(valor, str):
+        valor = valor.strip()
+        if not FORMATO_PRECIO.fullmatch(valor):
+            return None
+    numero = Decimal(str(valor))
+    if not numero.is_finite() or numero <= 0 or numero > PRECIO_MAX + 1:
+        return None
+    numero = numero.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    if numero <= 0 or numero > PRECIO_MAX:
+        return None
+    return float(numero)
+
+
+# Misma regla que back/helpers/fecha_precio.js: no se aceptan fechas posteriores a
+# mañana segun el calendario de Argentina (UTC-3 todo el año)
+ZONA_ARGENTINA = timezone(timedelta(hours=-3))
+FORMATO_FECHA = re.compile(
+    r'([0-9]{4})-([0-9]{2})-([0-9]{2})(?:[T ]([0-9]{2}):([0-9]{2})(?::([0-9]{2})(?:\.[0-9]+)?)?'
+    r'\s*(Z|[+-][0-9]{2}(?::?[0-9]{2})?)?)?', re.IGNORECASE)
+FECHA_NO_VALIDA = 'La fecha no es válida'
+FECHA_FUTURA = 'La fecha no puede ser posterior a mañana'
+
+
+def validar_fecha(valor, ahora=None):
+    """Devuelve (fecha_a_guardar, None) o (None, mensaje). La fecha a guardar es el
+    texto recibido, salvo si trae zona horaria: se pasa a hora de Argentina."""
+    if not isinstance(valor, str):
+        return None, FECHA_NO_VALIDA
+    texto = valor.strip()
+    m = FORMATO_FECHA.fullmatch(texto)
+    if not m:
+        return None, FECHA_NO_VALIDA
+    guardar = texto
+    try:
+        fecha = datetime(*(int(x or 0) for x in m.groups()[:6]))
+        zona = m.group(7)
+        if zona:
+            desfase = timedelta()
+            if zona.upper() != 'Z':
+                z = zona[1:].replace(':', '')
+                desfase = timedelta(hours=int(z[:2]), minutes=int(z[2:] or 0))
+                if zona[0] == '-':
+                    desfase = -desfase
+            fecha = fecha - desfase + ZONA_ARGENTINA.utcoffset(None)
+            guardar = fecha.strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, OverflowError):
+        return None, FECHA_NO_VALIDA
+    ahora = ahora or datetime.now(timezone.utc)
+    if fecha.date() > ahora.astimezone(ZONA_ARGENTINA).date() + timedelta(days=1):
+        return None, FECHA_FUTURA
+    return guardar, None
+
+
+def es_sucursal_negocio(cursor, branch_id):
+    """True si la sucursal tiene dueño (incluido el local "sin local"). Se consulta
+    en cada item: un local puede pasar a ser de negocio mientras corre el worker."""
+    cursor.execute("SELECT propietario_id FROM branch WHERE id = %s", (branch_id,))
+    fila = cursor.fetchone()
+    return bool(fila) and fila[0] is not None
 
 
 def registrar_descarte_csv(elemento, motivo, origen='worker'):
@@ -728,6 +804,17 @@ def procesar_articulo(articulo, fecha_registro=None):
         if not articulo.get(campo):
             return {'stat': False, 'text': f'Campo {campo} es obligatorio'}
     
+    # Rechazar antes de tocar la base lo que no entra en price.price
+    precio = normalizar_precio(articulo['price'])
+    if precio is None:
+        return {'stat': False, 'text': f"Precio inválido: {str(articulo['price'])[:40]}"}
+    articulo['price'] = precio
+
+    fecha_valida, error_fecha = validar_fecha(fecha_final)
+    if error_fecha:
+        return {'stat': False, 'text': f"{error_fecha} ({str(fecha_final)[:40]})"}
+    articulo['fecha_registro'] = fecha_valida
+    
     # Obtener conexión
     conexion = obtener_conexion()
     if not conexion:
@@ -735,6 +822,13 @@ def procesar_articulo(articulo, fecha_registro=None):
     
     try:
         cursor = conexion.cursor()
+
+        # Antes de cualquier escritura: ni precios nuevos ni reconfirmaciones
+        if es_sucursal_negocio(cursor, articulo['branch_id']):
+            cursor.close()
+            conexion.close()
+            return {'stat': False, 'text': f"Sucursal de negocio (branch_id {articulo['branch_id']}): "
+                                           "las importaciones no escriben sus precios"}
         
         # Limpiar textos
         articulo['name'] = limpiar_texto(articulo['name'])
@@ -822,6 +916,10 @@ def procesar_oferta(oferta):
     for campo in campos_requeridos:
         if not oferta.get(campo):
             return {'stat': False, 'text': f'Campo {campo} es obligatorio'}
+
+    fecha_valida, error_fecha = validar_fecha(oferta.get('fecha_registro'))
+    if error_fecha:
+        return {'stat': False, 'text': f"{error_fecha} ({str(oferta.get('fecha_registro'))[:40]})"}
     
     # Obtener conexión
     conexion = obtener_conexion()
@@ -832,10 +930,7 @@ def procesar_oferta(oferta):
         cursor = conexion.cursor()
         
         # Convertir fecha_registro a datetime
-        fecha_registro = oferta.get('fecha_registro')
-        if isinstance(fecha_registro, str):
-            from dateutil import parser
-            fecha_registro = parser.parse(fecha_registro)
+        fecha_registro = parser.parse(fecha_valida)
         
         # Verificar que la fecha sea de hoy o ayer
         hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

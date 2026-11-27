@@ -39,6 +39,17 @@ Despacha según el campo `tipo` del item:
 
 Cualquier otro `tipo` se descarta con log.
 
+Reglas que se aplican antes de escribir:
+
+- No se escriben precios (ni se reconfirman) en sucursales de negocio
+  (`branch.propietario_id` no nulo). Las ofertas no se ven afectadas.
+- `fecha_registro` de productos y ofertas no puede ser posterior a mañana según
+  la fecha de Argentina. Formato `YYYY-MM-DD[T ]HH:MM:SS`; si trae zona
+  horaria se convierte a hora de Argentina.
+
+Test sin base ni servicios:
+`venv/bin/python test_reglas_importacion.py`.
+
 Además, cada 10 items procesados actualiza `incremental_stats` (`cant_price`,
 `precios_hoy`, `cant_promos`) y limpia `price_today` /
 `estadistica_aumento_diario` de registros anteriores a ayer.
@@ -49,8 +60,9 @@ El servicio de colas no guarda estado por item, así que el contador de intentos
 viaja dentro del item (`_intentos`):
 
 - **Fallo permanente** (campo obligatorio faltante, categoría no especificada,
-  oferta duplicada o anterior a ayer): se descarta con log. Reintentar daría
-  exactamente lo mismo.
+  oferta duplicada o anterior a ayer, precio o fecha inválidos, sucursal de
+  negocio): se descarta con log y se registra en `logs/descartados.csv`.
+  Reintentar daría exactamente lo mismo.
 - **Fallo transitorio** (base caída, deadlock, timeout, excepción inesperada):
   se reencola con `POST /add_data` y `_intentos + 1`, hasta `QUEUE_MAX_RETRY`.
 - Con fallos transitorios **consecutivos** la espera crece

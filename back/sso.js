@@ -102,3 +102,4 @@ sso.loginAlerter = createLoginAlerter(normalizeLoginAlertsConfig(), { logger: { 
 module.exports = sso
 module.exports.ssoBaseUrl = ssoBaseUrl
 module.exports.asegurar_rol_admin = asegurar_rol_admin
+module.exports.ADMIN_EMAIL = ADMIN_EMAIL

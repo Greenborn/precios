@@ -4,12 +4,18 @@ var router = express.Router()
 module.exports = router
 const axios = require('axios')
 const { spawn } = require('child_process')
-const path = require('path')
-const fs = require('fs')
 const uuid = require('uuid')
 const busqueda_productos = require("../controllers/busqueda_productos")
 const sync_cache = require("../controllers/sync_cache")
 const { obtener_o_crear_local_sin_local } = require("../helpers/locales_branch")
+const { sincronizar_comercio } = require("../controllers/comercios_cache")
+const { validar_precio } = require("../helpers/precio")
+const { validar_fecha_precio, MENSAJES_FECHA } = require('../helpers/fecha_precio')
+const { es_sucursal_negocio, motivo_sucursal_negocio, registrar_descartes_csv } = require('../helpers/importacion')
+const precios_negocio = require("../controllers/precios_negocio")
+const { sincronizar_precio_negocio } = require("../controllers/sincronizacion_precios")
+const { clave_valida } = require("../helpers/clave")
+const { precios_publicos } = require("../helpers/precio_publico")
 
 // Configuración del servicio de colas
 const QUEUE_SERVICE_URL = process.env.QUEUE_SERVICE_URL || 'http://localhost:3501'
@@ -61,7 +67,7 @@ router.get('/all', async function (req, res) {
     
     try {
         let salida = global.products_category_diccio.by_category_id[req?.query?.category_id]
-        res.status(200).send({ stat: true, items: salida, error: true })
+        res.status(200).send({ stat: true, items: precios_publicos(salida), error: true })
     } catch (error) {
         console.log("error", error)
         res.status(200).send({ stat: false, items: [], error: true })
@@ -72,11 +78,10 @@ router.get('/all', async function (req, res) {
 router.post('/regenerar_price_today', async function (req, res) {
     const KEY = req.body?.key
     try {
-        const KEY_VALID = process.env.KEY_INT
         
         console.log('[regenerar_price_today] Recibida petición de regeneración')
         
-        if (KEY != KEY_VALID) {
+        if (!clave_valida(KEY)) {
             console.log('[regenerar_price_today] ✗ KEY inválida')
             res.status(200).send({ stat: false, error: "Error de autenticación" })
             return
@@ -123,8 +128,14 @@ router.put('/cargar_nuevo_precio', async function (req, res) {
         const PROD_ID = req.body?.product_id
         const BRANCH_ID = req.body?.branch_id
         const PRICE = req.body?.price
-        if (!PROD_ID || !BRANCH_ID || !PRICE){
+        if (!PROD_ID || !BRANCH_ID){
             res.status(200).send({ stat: false, error: "Error interno, reintente luego" })
+            return
+        }
+        // Antes del límite por IP: un precio mal cargado no consume la cuota
+        const validacion = validar_precio(PRICE)
+        if (!validacion.ok){
+            res.status(200).send({ stat: false, error: validacion.mensaje, errores: [{ campo: 'precio', mensaje: validacion.mensaje }] })
             return
         }
 
@@ -157,7 +168,7 @@ router.put('/cargar_nuevo_precio', async function (req, res) {
         console.log(diccio_limit)
 
         const registro = await registrar_precio_usuario(
-            req.session?.u_data, PROD_ID, BRANCH_ID, PRICE, new Date(),
+            req.session?.u_data, PROD_ID, BRANCH_ID, validacion.precio, new Date(),
             "Precios de la Gente - ingresado por formulario de corrección de precio"
         )
 
@@ -173,7 +184,8 @@ router.put('/cargar_nuevo_precio', async function (req, res) {
 
 // Registra un precio cargado por un usuario: inserta en price (histórico) con los
 // datos del autor, actualiza price_today y sincroniza buscador y caches en memoria.
-// Solo entra a price_today/buscador si la fecha cae dentro de la ventana hoy+ayer.
+// Solo entra a price_today si la fecha cae dentro de la ventana hoy+ayer; lo mismo para el
+// buscador, salvo en locales de negocio, que se resincronizan siempre desde `price`.
 // Devuelve el registro insertado o null si falla.
 async function registrar_precio_usuario(usuario, product_id, branch_id, price, fecha, notas) {
     const AHORA = (fecha instanceof Date && !isNaN(fecha.getTime())) ? fecha : new Date()
@@ -238,8 +250,7 @@ async function registrar_precio_usuario(usuario, product_id, branch_id, price, f
         }
 
         // Limpiar price_today (misma ventana hoy+ayer)
-        await trx('price_today').where('date_time', '<', AYER)
-            .whereNotIn('branch_id', trx('branch').select('id').whereNotNull('propietario_id')).del()
+        await trx('price_today').where('date_time', '<', AYER).del()
 
         // Obtener el nombre del producto para price_today
         const producto_db = await trx('products').where('id', product_id).first()
@@ -292,7 +303,15 @@ async function registrar_precio_usuario(usuario, product_id, branch_id, price, f
         await trx.commit()
 
         // Sincronizar estructura de búsqueda en tiempo real
-        if (product_name && AHORA >= AYER) {
+        if (precios_negocio.es_negocio(branch_id)) {
+            // Sin condición de ventana: vale el último de `price`, aunque la carga sea antigua
+            try {
+                await sincronizar_precio_negocio(product_id, branch_id)
+            } catch (error) {
+                // El precio ya está guardado: no se informa como fallido
+                console.log("error al sincronizar precio de negocio", error)
+            }
+        } else if (product_name && AHORA >= AYER) {
             busqueda_productos.agregar_a_buscador({
                 product_name: product_name,
                 product_id: product_id,
@@ -390,8 +409,10 @@ async function resolver_comercio_form(nombre_comercio) {
             .first()
 
         if (empresa) {
+            // Nunca el local "sin local" de un usuario: si el comercio no tiene otro, se crea uno
             let sucursal = await global.knex('branch')
                 .where({ enterprise_id: empresa.id })
+                .whereNull('sin_local')
                 .orderBy('id', 'asc')
                 .first()
             if (!sucursal) {
@@ -399,6 +420,7 @@ async function resolver_comercio_form(nombre_comercio) {
                     branch_name: empresa.name, enterprise_id: empresa.id
                 })
                 sucursal = { id: Number(bid) }
+                await sincronizar_comercio(global.knex, { branch_id: sucursal.id })
             }
             return { enterprise_id: empresa.id, branch_id: sucursal.id }
         }
@@ -427,6 +449,33 @@ async function resolver_comercio_form(nombre_comercio) {
         console.log('[cargar_precios_formulario] no se pudo obtener/crear el comercio', error)
         return null
     }
+}
+
+// Valida todas las filas del formulario comunitario antes de tocar la base.
+// Devuelve [{ fila, campo, mensaje }] (vacía si todo está bien); las filas vacías se ignoran.
+function validar_carga_precios_formulario(productos, fecha) {
+    const errores = []
+    if (fecha != null && String(fecha) !== '') {
+        const r = validar_fecha_precio(fecha)
+        if (!r.ok) errores.push({ campo: 'fecha', mensaje: r.mensaje })
+    }
+    if (productos.length > CARGA_FORMULARIO_MAX_FILAS)
+        errores.push({ campo: 'productos', mensaje: `Se pueden cargar hasta ${CARGA_FORMULARIO_MAX_FILAS} artículos por envío` })
+    productos.forEach((item, i) => {
+        if (fila_formulario_vacia(item)) return
+        if (!String(item?.nombre ?? '').trim())
+            errores.push({ fila: i + 1, campo: 'nombre', mensaje: 'El nombre del artículo es obligatorio' })
+        const precio = validar_precio(item?.precio)
+        if (!precio.ok) errores.push({ fila: i + 1, campo: 'precio', mensaje: precio.mensaje })
+    })
+    if (!errores.length && productos.every(fila_formulario_vacia))
+        errores.push({ campo: 'productos', mensaje: 'Debe cargar al menos un artículo con nombre y precio' })
+    return errores
+}
+
+const CARGA_FORMULARIO_MAX_FILAS = 100
+function fila_formulario_vacia(item) {
+    return ['nombre', 'marca', 'presentacion', 'precio'].every((c) => !String(item?.[c] ?? '').trim())
 }
 
 // Carga masiva de precios desde el formulario comunitario (/carga_precio).
@@ -461,6 +510,14 @@ router.put('/cargar_precios_formulario', async function (req, res) {
             return
         }
 
+        // Si alguna fila es inválida no se carga ninguna (y no consume la cuota por IP)
+        const errores = validar_carga_precios_formulario(PRODUCTOS, req.body?.fecha)
+        if (errores.length){
+            const { fila, mensaje } = errores[0]
+            res.status(200).send({ stat: false, error: fila ? `Fila ${fila}: ${mensaje}` : mensaje, errores })
+            return
+        }
+
         // Rate limit por IP (mismo diccionario que la corrección de precios)
         let IP = req.header('x-forwarded-for')
         if (IP == undefined)
@@ -488,16 +545,12 @@ router.put('/cargar_precios_formulario', async function (req, res) {
 
         let cargados = 0
         let con_error = 0
-        for (let i = 0; i < PRODUCTOS.length && i < 100; i++){
+        for (let i = 0; i < PRODUCTOS.length; i++){
             const item = PRODUCTOS[i]
+            if (fila_formulario_vacia(item)) continue
             const nombre_canonico = [item?.nombre, item?.marca, item?.presentacion]
                 .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-            const precio = Number(item?.precio)
-
-            if (!nombre_canonico || !precio || precio <= 0){
-                con_error++
-                continue
-            }
+            const precio = validar_precio(item.precio).precio
 
             const producto = await resolver_producto_form(nombre_canonico, item?.marca)
             if (!producto){
@@ -526,7 +579,6 @@ router.put('/cargar_precios_formulario', async function (req, res) {
 // Límites y validación de la carga de precios del propio negocio. El front usa las mismas reglas
 // para marcar cada campo; acá se valida de nuevo antes de tocar la base.
 const CARGA_NEGOCIO_MAX_FILAS = 100
-const CARGA_NEGOCIO_MAX_PRECIO = 999999999
 const CARGA_NEGOCIO_LIMITES = { nombre: 200, marca: 100, presentacion: 100 }
 const CARGA_NEGOCIO_FECHA = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -550,8 +602,8 @@ function validar_carga_precios_negocio(body) {
 
     if (body?.fecha != null && String(body.fecha) !== '') {
         const fecha = String(body.fecha)
-        if (!fecha_valida(fecha))
-            errores.push({ campo: 'fecha', mensaje: 'La fecha no es válida' })
+        const r = fecha_valida(fecha) ? validar_fecha_precio(fecha) : { ok: false, mensaje: MENSAJES_FECHA.no_valida }
+        if (!r.ok) errores.push({ campo: 'fecha', mensaje: r.mensaje })
     }
 
     const productos = Array.isArray(body?.productos) ? body.productos : []
@@ -572,13 +624,8 @@ function validar_carga_precios_negocio(body) {
         if (marca.length > CARGA_NEGOCIO_LIMITES.marca) errores.push({ fila, campo: 'marca', mensaje: `La marca no puede superar los ${CARGA_NEGOCIO_LIMITES.marca} caracteres` })
         if (presentacion.length > CARGA_NEGOCIO_LIMITES.presentacion) errores.push({ fila, campo: 'presentacion', mensaje: `La presentación no puede superar los ${CARGA_NEGOCIO_LIMITES.presentacion} caracteres` })
 
-        if (precio_crudo === '') errores.push({ fila, campo: 'precio', mensaje: 'El precio es obligatorio' })
-        else {
-            const precio = Number(precio_crudo.replace(',', '.'))
-            if (!Number.isFinite(precio)) errores.push({ fila, campo: 'precio', mensaje: 'El precio debe ser un número' })
-            else if (precio <= 0) errores.push({ fila, campo: 'precio', mensaje: 'El precio debe ser mayor a 0' })
-            else if (precio > CARGA_NEGOCIO_MAX_PRECIO) errores.push({ fila, campo: 'precio', mensaje: 'El precio es demasiado alto' })
-        }
+        const precio = validar_precio(item?.precio)
+        if (!precio.ok) errores.push({ fila, campo: 'precio', mensaje: precio.mensaje })
     })
 
     // Sin filas con datos no hay nada que cargar
@@ -642,7 +689,7 @@ router.put('/cargar_precios_negocio', async function (req, res) {
             const item = PRODUCTOS[i]
             const nombre_canonico = [item?.nombre, item?.marca, item?.presentacion]
                 .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-            const precio = Number(String(item?.precio).replace(',', '.'))
+            const precio = validar_precio(item?.precio).precio
 
             const producto = await resolver_producto_form(nombre_canonico, item?.marca)
             if (!producto){
@@ -671,113 +718,15 @@ router.put('/cargar_precios_negocio', async function (req, res) {
 
 // Expuesto para test_carga_precios_negocio.js (validación sin base de datos)
 router.validar_carga_precios_negocio = validar_carga_precios_negocio
+// Expuesto para test_carga_comunitaria.js
+router.resolver_comercio_form = resolver_comercio_form
+router.registrar_precio_usuario = registrar_precio_usuario
+// Expuesto para test_validacion_precio.js
+router.validar_carga_precios_formulario = validar_carga_precios_formulario
 
 // Identificador único de cola (productos + ofertas)
 // cada item llevará un campo `tipo` para distinguir su procesamiento
 const idColaPrecios = "precios"  // cola unica; el tipo va en el item: 'producto', 'oferta', 'regenerar_precios'
-
-const TABLAS = {
-    "ml": {
-        "articulos": "articulos_mercado_libre",
-        "precios": "precios_articulos_mercado_libre"
-    },
-    "region20": {
-        "articulos": "articulos_region_20",
-        "precios": "precios_articulos_region_20"
-    }
-}
-
-async function procesa_art_plataforma(DATA){
-    let HOY = new Date()
-    HOY.setHours(0,0,0,1)
-    // HOY aquí es UTC, para inserts y updates usar new Date() directamente
-    
-    let existe = await global.knex(TABLAS[DATA.plataforma].articulos).select()
-                    .where('url', DATA.url).first()
-
-    if (existe){
-        await global.knex(TABLAS[DATA.plataforma].articulos).update({
-            nombre: DATA.name,
-            precio: DATA?.currency === 'pesos' ? DATA.price : null,
-            precio_dolares: DATA?.currency === 'dolares' ? DATA.price : null,
-            categoria: DATA.category_name,
-            fecha_actualizacion: new Date()
-        }).where('url', DATA.url)
-
-        let ultimo_precio = await global.knex(TABLAS[DATA.plataforma].precios).select()
-                                .where('id_articulo', existe.id)
-                                .orderBy('id', 'desc').first()
-        if (!ultimo_precio){
-            await global.knex(TABLAS[DATA.plataforma].precios).insert({
-                id_articulo: existe.id,
-                precio: DATA?.currency === 'pesos' ? DATA.price : null,
-                precio_dolares: DATA?.currency === 'dolares' ? DATA.price : null,
-                fecha: new Date()
-            })
-            console.log("precio registrado")
-        } else {
-            if ((ultimo_precio.precio != DATA.price && ultimo_precio.precio !== null )
-                || (ultimo_precio.precio_dolares != DATA.price && ultimo_precio.precio_dolares !== null)){
-                await global.knex(TABLAS[DATA.plataforma].precios).insert({
-                    id_articulo: existe.id,
-                    precio: DATA?.currency === 'pesos' ? DATA.price : null,
-                    precio_dolares: DATA?.currency === 'dolares' ? DATA.price : null,
-                    fecha: new Date()
-                })
-                console.log("precio actualizado")
-            }
-        }
-    } else {
-        await global.knex(TABLAS[DATA.plataforma].articulos).insert({
-            nombre: DATA.name,
-            precio: DATA?.currency === 'pesos' ? DATA.price : null,
-            precio_dolares: DATA?.currency === 'dolares' ? DATA.price : null,
-            categoria: DATA.category_name,
-            fecha_actualizacion: new Date(),
-            fecha_creacion: new Date(),
-            url: DATA.url
-        }).where('url', DATA.url)
-        .then(async function (id_nuevo) {
-            console.log('id_nuevo',id_nuevo)
-            await global.knex(TABLAS[DATA.plataforma].precios).insert({
-                id_articulo: id_nuevo,
-                precio: DATA?.currency === 'pesos' ? DATA.price : null,
-                precio_dolares: DATA?.currency === 'dolares' ? DATA.price : null,
-                fecha: new Date()
-            })
-        })
-        
-    }
-    return
-}
-
-router.post('/importar_articulo_plataforma', async function (req, res) {
-    //console.log("data ", req.body)
-    const KEY = req.body?.key
-    const DATA = req.body
-    try {
-        /*const KEY_VALID = process.env.KEY_INT
-        if (KEY != KEY_VALID){
-            res.status(200).send({ stat: false,  error: "Error interno, reintente luego_" })
-            return
-        }*/
-        
-        let proms_arr = []
-        for (let i=0; i < DATA.length; i++)
-            proms_arr.push(procesa_art_plataforma(DATA[i]))
-        
-        let res_procesa = await Promise.all(proms_arr)
-        if (res_procesa)
-            console.log("res_procesa", res_procesa)
-        
-        res.status(200).send({ stat: true })
-        return
-        
-    } catch (error) {
-        console.log("error", error)
-        res.status(200).send({ stat: false,  error: "Error interno, reintente luego" })
-    }    
-})
 
 const MD5 = function(d){var r = M(V(Y(X(d),8*d.length)));return r.toLowerCase()};function M(d){for(var _,m="0123456789ABCDEF",f="",r=0;r<d.length;r++)_=d.charCodeAt(r),f+=m.charAt(_>>>4&15)+m.charAt(15&_);return f}function X(d){for(var _=Array(d.length>>2),m=0;m<_.length;m++)_[m]=0;for(m=0;m<8*d.length;m+=8)_[m>>5]|=(255&d.charCodeAt(m/8))<<m%32;return _}function V(d){for(var _="",m=0;m<32*d.length;m+=8)_+=String.fromCharCode(d[m>>5]>>>m%32&255);return _}function Y(d,_){d[_>>5]|=128<<_%32,d[14+(_+64>>>9<<4)]=_;for(var m=1732584193,f=-271733879,r=-1732584194,i=271733878,n=0;n<d.length;n+=16){var h=m,t=f,g=r,e=i;f=md5_ii(f=md5_ii(f=md5_ii(f=md5_ii(f=md5_hh(f=md5_hh(f=md5_hh(f=md5_hh(f=md5_gg(f=md5_gg(f=md5_gg(f=md5_gg(f=md5_ff(f=md5_ff(f=md5_ff(f=md5_ff(f,r=md5_ff(r,i=md5_ff(i,m=md5_ff(m,f,r,i,d[n+0],7,-680876936),f,r,d[n+1],12,-389564586),m,f,d[n+2],17,606105819),i,m,d[n+3],22,-1044525330),r=md5_ff(r,i=md5_ff(i,m=md5_ff(m,f,r,i,d[n+4],7,-176418897),f,r,d[n+5],12,1200080426),m,f,d[n+6],17,-1473231341),i,m,d[n+7],22,-45705983),r=md5_ff(r,i=md5_ff(i,m=md5_ff(m,f,r,i,d[n+8],7,1770035416),f,r,d[n+9],12,-1958414417),m,f,d[n+10],17,-42063),i,m,d[n+11],22,-1990404162),r=md5_ff(r,i=md5_ff(i,m=md5_ff(m,f,r,i,d[n+12],7,1804603682),f,r,d[n+13],12,-40341101),m,f,d[n+14],17,-1502002290),i,m,d[n+15],22,1236535329),r=md5_gg(r,i=md5_gg(i,m=md5_gg(m,f,r,i,d[n+1],5,-165796510),f,r,d[n+6],9,-1069501632),m,f,d[n+11],14,643717713),i,m,d[n+0],20,-373897302),r=md5_gg(r,i=md5_gg(i,m=md5_gg(m,f,r,i,d[n+5],5,-701558691),f,r,d[n+10],9,38016083),m,f,d[n+15],14,-660478335),i,m,d[n+4],20,-405537848),r=md5_gg(r,i=md5_gg(i,m=md5_gg(m,f,r,i,d[n+9],5,568446438),f,r,d[n+14],9,-1019803690),m,f,d[n+3],14,-187363961),i,m,d[n+8],20,1163531501),r=md5_gg(r,i=md5_gg(i,m=md5_gg(m,f,r,i,d[n+13],5,-1444681467),f,r,d[n+2],9,-51403784),m,f,d[n+7],14,1735328473),i,m,d[n+12],20,-1926607734),r=md5_hh(r,i=md5_hh(i,m=md5_hh(m,f,r,i,d[n+5],4,-378558),f,r,d[n+8],11,-2022574463),m,f,d[n+11],16,1839030562),i,m,d[n+14],23,-35309556),r=md5_hh(r,i=md5_hh(i,m=md5_hh(m,f,r,i,d[n+1],4,-1530992060),f,r,d[n+4],11,1272893353),m,f,d[n+7],16,-155497632),i,m,d[n+10],23,-1094730640),r=md5_hh(r,i=md5_hh(i,m=md5_hh(m,f,r,i,d[n+13],4,681279174),f,r,d[n+0],11,-358537222),m,f,d[n+3],16,-722521979),i,m,d[n+6],23,76029189),r=md5_hh(r,i=md5_hh(i,m=md5_hh(m,f,r,i,d[n+9],4,-640364487),f,r,d[n+12],11,-421815835),m,f,d[n+15],16,530742520),i,m,d[n+2],23,-995338651),r=md5_ii(r,i=md5_ii(i,m=md5_ii(m,f,r,i,d[n+0],6,-198630844),f,r,d[n+7],10,1126891415),m,f,d[n+14],15,-1416354905),i,m,d[n+5],21,-57434055),r=md5_ii(r,i=md5_ii(i,m=md5_ii(m,f,r,i,d[n+12],6,1700485571),f,r,d[n+3],10,-1894986606),m,f,d[n+10],15,-1051523),i,m,d[n+1],21,-2054922799),r=md5_ii(r,i=md5_ii(i,m=md5_ii(m,f,r,i,d[n+8],6,1873313359),f,r,d[n+15],10,-30611744),m,f,d[n+6],15,-1560198380),i,m,d[n+13],21,1309151649),r=md5_ii(r,i=md5_ii(i,m=md5_ii(m,f,r,i,d[n+4],6,-145523070),f,r,d[n+11],10,-1120210379),m,f,d[n+2],15,718787259),i,m,d[n+9],21,-343485551),m=safe_add(m,h),f=safe_add(f,t),r=safe_add(r,g),i=safe_add(i,e)}return Array(m,f,r,i)}function md5_cmn(d,_,m,f,r,i){return safe_add(bit_rol(safe_add(safe_add(_,d),safe_add(f,i)),r),m)}function md5_ff(d,_,m,f,r,i,n){return md5_cmn(_&m|~_&f,d,_,r,i,n)}function md5_gg(d,_,m,f,r,i,n){return md5_cmn(_&f|m&~f,d,_,r,i,n)}function md5_hh(d,_,m,f,r,i,n){return md5_cmn(_^m^f,d,_,r,i,n)}function md5_ii(d,_,m,f,r,i,n){return md5_cmn(m^(_|~f),d,_,r,i,n)}function safe_add(d,_){var m=(65535&d)+(65535&_);return(d>>16)+(_>>16)+(m>>16)<<16|65535&m}function bit_rol(d,_){return d<<_|d>>>32-_}
 
@@ -787,12 +736,11 @@ const MD5 = function(d){var r = M(V(Y(X(d),8*d.length)));return r.toLowerCase()}
 router.post('/importar_oferta', async function (req, res) {
     const KEY = req.body?.key
     try {
-        const KEY_VALID = process.env.KEY_INT
         const ARR_IMPORTA = req.body?.lst_importa
 
         console.log(`[importar_oferta] Recibida petición con ${ARR_IMPORTA?.length || 0} ofertas`)
 
-        if (KEY != KEY_VALID){
+        if (!clave_valida(KEY)){
             console.log('[importar_oferta] ✗ KEY inválida')
             res.status(200).send({ stat: false,  error: "Error interno, reintente luego_" })
             return
@@ -804,18 +752,27 @@ router.post('/importar_oferta', async function (req, res) {
             return
         }
 
-        console.log(`[importar_oferta] Enviando ${ARR_IMPORTA.length} ofertas al servicio de colas...`)
+        // Fechas posteriores a mañana: se descartan antes de encolar
+        const rechazados = []
+        const validas = ARR_IMPORTA.filter(i => {
+            const fecha = i?.fecha_registro ? validar_fecha_precio(i.fecha_registro) : { ok: true }
+            if (!fecha.ok) rechazados.push({ item: i, motivo: `${fecha.mensaje} (${String(i.fecha_registro)})` })
+            return fecha.ok
+        })
+        if (rechazados.length) registrar_descartes_csv(rechazados, 'oferta')
+
+        console.log(`[importar_oferta] Enviando ${validas.length} ofertas al servicio de colas...`)
 
         // Agregar items a la cola externa (cola única)
         let agregados = 0;
-        for (let index = 0; index < ARR_IMPORTA.length; index++) {
-            const item = { ...ARR_IMPORTA[index], tipo: 'oferta' } // marcar tipo de elemento
+        for (let index = 0; index < validas.length; index++) {
+            const item = { ...validas[index], tipo: 'oferta' } // marcar tipo de elemento
             const success = await agregarACola(idColaPrecios, item)
             if (success) agregados++;
         }
         
         console.log(`[importar_oferta] ✓ Completado: ${agregados}/${ARR_IMPORTA.length} ofertas enviadas`)
-        return res.status(200).send({ stat: true, count: agregados })
+        return res.status(200).send({ stat: true, count: agregados, rechazados: rechazados.length })
     } catch (error) {
         console.log("error", error)
         res.status(200).send({ stat: false,  error: "Error interno, reintente luego" })
@@ -826,8 +783,7 @@ router.post('/importar_alquiler', async function (req, res) {
     console.log("data ", req.body)
     const KEY = req.body?.key
     try {
-        const KEY_VALID = process.env.KEY_INT
-        if (KEY != KEY_VALID){
+        if (!clave_valida(KEY)){
             res.status(200).send({ stat: false,  error: "Error interno, reintente luego" })
             return
         }
@@ -903,38 +859,16 @@ router.post('/importar_alquiler', async function (req, res) {
     }
 })
 
-// Agrega al CSV compartido con el worker (extra_services/logs/descartados.csv)
-const CSV_DESCARTADOS = process.env.CSV_DESCARTADOS ||
-    path.join(__dirname, '..', '..', 'extra_services', 'logs', 'descartados.csv')
-function registrarDescartesCsv(rechazados) {
-    try {
-        fs.mkdirSync(path.dirname(CSV_DESCARTADOS), { recursive: true })
-        const esc = v => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`
-        let out = ''
-        if (!fs.existsSync(CSV_DESCARTADOS) || fs.statSync(CSV_DESCARTADOS).size === 0) {
-            out += 'fecha,origen,tipo,nombre,branch_id,motivo\n'
-        }
-        const fecha = new Date().toISOString().replace('T', ' ').slice(0, 19)
-        for (const { item, motivo } of rechazados) {
-            out += [fecha, 'importar', 'producto', item?.name || '', item?.branch_id || '', motivo].map(esc).join(',') + '\n'
-        }
-        fs.appendFileSync(CSV_DESCARTADOS, out)
-    } catch (e) {
-        console.log('[importar] no se pudo escribir CSV de descartados', e.message)
-    }
-}
-
 // Endpoint para importar productos y llenar la cola de procesamiento
 // El endpoint /importar utiliza el servicio externo de colas
 router.post('/importar', async function (req, res) {
     const KEY = req.body?.key;
     try {
-        const KEY_VALID = process.env.KEY_INT;
         const ARR_IMPORTA = req.body?.lst_importa;
 
         console.log(`[importar] Recibida petición con ${ARR_IMPORTA?.length || 0} productos`)
 
-        if (KEY != KEY_VALID) {
+        if (!clave_valida(KEY)) {
             console.log('[importar] ✗ KEY inválida')
             res.status(200).send({ stat: false, error: "Error interno, reintente luego_" });
             return;
@@ -951,12 +885,30 @@ router.post('/importar', async function (req, res) {
         // Validar que las sucursales existan: un branch_id inexistente rompe la FK
         // de price_today y bloquea la cola del worker. Se rechaza y se deja en CSV.
         const ids = [...new Set(ARR_IMPORTA.map(i => i && i.branch_id).filter(Boolean))]
-        const existentes = new Set(
-            ids.length ? (await global.knex('branch').whereIn('id', ids).select('id')).map(r => String(r.id)) : []
+        const existentes = new Map(
+            ids.length ? (await global.knex('branch').whereIn('id', ids).select('id', 'propietario_id')).map(r => [String(r.id), r]) : []
         )
         const rechazados = []
         const validos = ARR_IMPORTA.filter(i => {
-            if (i && i.branch_id && existentes.has(String(i.branch_id))) return true
+            if (i && i.branch_id && existentes.has(String(i.branch_id))) {
+                if (es_sucursal_negocio(existentes.get(String(i.branch_id)))) {
+                    rechazados.push({ item: i, motivo: motivo_sucursal_negocio(i.branch_id) })
+                    return false
+                }
+                // Sin fecha_registro la rechaza el worker
+                if (i.fecha_registro) {
+                    const fecha = validar_fecha_precio(i.fecha_registro)
+                    if (!fecha.ok) {
+                        rechazados.push({ item: i, motivo: `${fecha.mensaje} (${String(i.fecha_registro)})` })
+                        return false
+                    }
+                }
+                // Un precio fuera de price.price (decimal(10,2)) fallaría en el worker
+                const precio = validar_precio(i.price, { redondear: true })
+                if (precio.ok) return true
+                rechazados.push({ item: i, motivo: `precio inválido (${String(i.price)}): ${precio.mensaje}` })
+                return false
+            }
             rechazados.push({
                 item: i,
                 motivo: i && i.branch_id ? `branch_id ${i.branch_id} no existe en branch` : 'branch_id es obligatorio'
@@ -964,8 +916,8 @@ router.post('/importar', async function (req, res) {
             return false
         })
         if (rechazados.length) {
-            registrarDescartesCsv(rechazados)
-            console.log(`[importar] ✗ ${rechazados.length} items rechazados por branch_id inválido`)
+            registrar_descartes_csv(rechazados)
+            console.log(`[importar] ✗ ${rechazados.length} items rechazados (branch_id, sucursal de negocio, fecha o precio)`)
         }
 
         // Agregar items a la cola externa (cola única)

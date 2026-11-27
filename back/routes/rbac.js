@@ -1,6 +1,15 @@
 const express = require('express')
 var router = express.Router()
 module.exports = router
+const { es_admin } = require('../helpers/authorization')
+
+const SOLO_ADMIN = 'Solo un administrador puede otorgar roles o permisos'
+
+// Ademas del permiso de la ruta (middleware/Admin.js), otorgar roles o permisos exige ser administrador
+function solo_admin(req, res, next) {
+  if (!es_admin(req)) return err(res, SOLO_ADMIN)
+  next()
+}
 
 const FIELDS_DEF_ROLES = [
   { field: 'id',          headerName: 'ID',          sortable: true },
@@ -86,6 +95,11 @@ router.put('/editar_rol', async function (req, res) {
   try {
     const rol = await global.knex('roles').where({ id }).first()
     if (!rol) return err(res, 'Rol no encontrado')
+    // El nombre determina quien es administrador y que rol reciben las altas por SSO
+    if (nombre && nombre !== rol.nombre) {
+      if (!es_admin(req)) return err(res, SOLO_ADMIN)
+      if (rol.nombre === 'administrador') return err(res, 'El rol administrador no puede renombrarse')
+    }
     const actualizar = {}
     if (nombre) actualizar.nombre = nombre
     if (descripcion !== undefined) actualizar.descripcion = descripcion
@@ -106,7 +120,7 @@ router.delete('/eliminar_rol', async function (req, res) {
   } catch (e) { console.log('[rbac] eliminar_rol:', e); err(res, 'Error al eliminar rol') }
 })
 
-router.post('/asignar_permiso_rol', async function (req, res) {
+router.post('/asignar_permiso_rol', solo_admin, async function (req, res) {
   const { id_rol, id_permiso } = req.body || {}
   if (!id_rol || !id_permiso) return err(res, 'Rol y permiso requeridos')
   try {
@@ -116,7 +130,7 @@ router.post('/asignar_permiso_rol', async function (req, res) {
   } catch (e) { console.log('[rbac] asignar_permiso_rol:', e); err(res, 'Error al vincular permiso') }
 })
 
-router.post('/asignar_usuario_rol', async function (req, res) {
+router.post('/asignar_usuario_rol', solo_admin, async function (req, res) {
   const { id_usuario, id_rol } = req.body || {}
   if (!id_usuario || !id_rol) return err(res, 'Usuario y rol requeridos')
   try {
@@ -156,6 +170,8 @@ router.put('/editar_permiso', async function (req, res) {
   try {
     const permiso = await global.knex('permisos').where({ id }).first()
     if (!permiso) return err(res, 'Permiso no encontrado')
+    // Los permisos se comprueban por nombre: renombrar uno otorga otro a sus roles
+    if (nombre && nombre !== permiso.nombre && !es_admin(req)) return err(res, SOLO_ADMIN)
     const actualizar = {}
     if (nombre) actualizar.nombre = nombre
     if (descripcion !== undefined) actualizar.descripcion = descripcion

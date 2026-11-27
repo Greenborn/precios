@@ -1,12 +1,12 @@
 const express = require('express')
 var router = express.Router()
 module.exports = router
+const { clave_valida } = require('../helpers/clave')
 
 router.post('/', async function (req, res) {
     const KEY = req.body?.key
     try {
-        const KEY_VALID = process.env.KEY_INT
-        if (KEY != KEY_VALID) {
+        if (!clave_valida(KEY)) {
             res.status(200).send({ stat: false, error: "Error de autenticación" })
             return
         }

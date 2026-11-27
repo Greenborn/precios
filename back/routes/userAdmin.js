@@ -6,6 +6,12 @@ const axios = require('axios')
 const { firmar_token, cargar_usuario } = require('../helpers/auth')
 const sso = require('../sso')
 const { validar_password } = require('../helpers/password_reglas')
+const { es_admin } = require('../helpers/authorization')
+
+// El email del admin unico otorga el rol administrador (seed RBAC y login SSO)
+function es_email_admin(email) {
+  return Boolean(sso.ADMIN_EMAIL) && String(email).trim().toLowerCase() === sso.ADMIN_EMAIL
+}
 
 const FIELDS_DEF_USUARIOS = [
   { field: 'id',       headerName: 'ID',      sortable: true },
@@ -185,6 +191,9 @@ router.put('/guardar_config', async function (req, res) {
     if (e.length < 5 || e.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
       return responder_err(res, 'El email no tiene un formato válido')
     }
+    if (es_email_admin(e) && !es_email_admin(usuario.email) && !es_admin(req)) {
+      return responder_err(res, 'El email no está disponible')
+    }
     actualizar.email = e
   }
   if (es_negocio !== undefined) actualizar.es_negocio = Boolean(es_negocio)
@@ -282,6 +291,11 @@ router.post('/add_one', async function (req, res) {
   const { name, apellido, email, pass, roles } = req.body || {}
   if (!name || !email || !pass) return responder_err(res, 'Nombre, email y contraseña son requeridos')
 
+  const sin_roles = roles === undefined || roles === null || (Array.isArray(roles) && roles.length === 0)
+  if (!sin_roles && !es_admin(req)) return responder_err(res, 'Solo un administrador puede asignar roles')
+  if (!sin_roles && !Array.isArray(roles)) return responder_err(res, 'roles debe ser un array')
+  if (es_email_admin(email) && !es_admin(req)) return responder_err(res, 'El email no está disponible')
+
   try {
     const existente = await global.knex('usuarios').where({ email }).first()
     if (existente) return responder_err(res, 'El email ya está en uso')
@@ -289,7 +303,7 @@ router.post('/add_one', async function (req, res) {
     const hash = await bcrypt.hash(pass, 10)
     const [id] = await global.knex('usuarios').insert({ name, apellido: apellido || null, email, pass: hash })
 
-    if (roles && roles.length > 0) {
+    if (!sin_roles) {
       const inserts = roles.map((rolId) => ({ usuario_id: id, rol_id: rolId }))
       await global.knex('usuarios_roles').insert(inserts)
     }

@@ -85,7 +85,7 @@
             </div>
             <div class="col-12 col-md-5">
               <label for="precio_fecha" class="form-label fw-semibold">Fecha</label>
-              <input id="precio_fecha" type="date" class="form-control" v-model="fecha_precios"
+              <input id="precio_fecha" type="date" class="form-control" v-model="fecha_precios" :max="dia_desde_hoy(1)"
                      :class="{ 'is-invalid': err('fecha') }" :aria-invalid="err('fecha') ? 'true' : 'false'"
                      :aria-describedby="err('fecha') ? 'err_fecha' : null"
                      @input="tocar('fecha')" @blur="tocar('fecha')">
@@ -248,6 +248,8 @@ import PerfilNegocioForm from '../components/publico/PerfilNegocioForm.vue'
 import { LocalesMapa, useLocales } from '@greenborn/vue-greenborn-locales-mapa'
 import '@greenborn/vue-greenborn-map-viewer/style.css'
 import { http, guardar_foto_articulo, obtener_mi_perfil, listar_mis_precios, editar_mi_precio, eliminar_mi_precio } from '../api/negocio'
+import { validar_precio } from '../utils/precio'
+import { dia_desde_hoy, es_fecha_futura, MENSAJE_FECHA_FUTURA } from '../utils/fecha'
 import { AppStore } from '../stores/app'
 
 // Mismos campos que config/negocio.js del back (CAMPOS_PERFIL)
@@ -270,7 +272,7 @@ const mensajeExito = ref('')
 
 const enviandoPrecios = ref(false)
 const local_precios = ref(null)
-const fecha_precios = ref(new Date().toISOString().split('T')[0])
+const fecha_precios = ref(dia_desde_hoy())
 const filas_vacia = () => ({ nombre: '', marca: '', presentacion: '', precio: '', foto: null, error_foto: '' })
 const filas = ref([filas_vacia()])
 
@@ -313,10 +315,15 @@ function cancelar_edicion() {
 }
 
 async function guardar_edicion(p) {
+  const validacion = validar_precio(edicion.valor)
+  if (!validacion.ok) {
+    storeApp.mostrar_alerta(validacion.mensaje)
+    return
+  }
   editando.value = true
   try {
-    await editar_mi_precio(p.id, edicion.valor)
-    p.precio = Number(String(edicion.valor).trim().replace(',', '.'))
+    await editar_mi_precio(p.id, validacion.precio)
+    p.precio = validacion.precio
     cancelar_edicion()
     storeApp.mostrar_alerta('Precio actualizado')
   } catch (err) {
@@ -437,7 +444,7 @@ async function guardar_local(local, datos) {
 function eliminar_local(local) {
   storeApp.mostrar_confirm({
     title: 'Eliminar local',
-    text: `Se eliminará "${local.nombre || 'el local'}" y sus fotos de artículos. ¿Continuar?`,
+    text: `Se eliminará "${local.nombre || 'el local'}", sus fotos de artículos y todos sus precios, incluido el histórico, de forma permanente. Esta acción no se puede deshacer. ¿Continuar?`,
     severity_confirmar: 'danger',
     confirmar_accion: async () => {
       try {
@@ -527,7 +534,6 @@ function cambiar_foto_pendiente(evento) {
 const LIMITE_NOMBRE = 200
 const LIMITE_MARCA = 100
 const LIMITE_PRESENTACION = 100
-const PRECIO_MAXIMO = 999999999
 
 const fila_vacia = (f) => !String(f.nombre || '').trim() && !String(f.marca || '').trim()
   && !String(f.presentacion || '').trim() && String(f.precio ?? '').trim() === '' && !f.foto
@@ -539,7 +545,6 @@ function fecha_valida(texto) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
   return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])
 }
-const numero_precio = (valor) => Number(String(valor ?? '').trim().replace(',', '.'))
 const clave = (index, campo) => `fila-${index}-${campo}`
 
 // Errores del formulario: clave -> mensaje. Claves: 'local', 'fecha', 'productos', 'fila-<i>-<campo>'
@@ -549,6 +554,7 @@ const errores_locales = computed(() => {
   const f = String(fecha_precios.value || '')
   if (!f) e.fecha = 'Indicá la fecha de los precios'
   else if (!fecha_valida(f)) e.fecha = 'La fecha no es válida'
+  else if (es_fecha_futura(f)) e.fecha = MENSAJE_FECHA_FUTURA
 
   let hay_datos = false
   filas.value.forEach((fila, i) => {
@@ -563,13 +569,8 @@ const errores_locales = computed(() => {
     else if (nombre.length > LIMITE_NOMBRE) e[clave(i, 'nombre')] = `El nombre no puede superar los ${LIMITE_NOMBRE} caracteres`
     if (marca.length > LIMITE_MARCA) e[clave(i, 'marca')] = `La marca no puede superar los ${LIMITE_MARCA} caracteres`
     if (presentacion.length > LIMITE_PRESENTACION) e[clave(i, 'presentacion')] = `La presentación no puede superar los ${LIMITE_PRESENTACION} caracteres`
-    if (precio === '') e[clave(i, 'precio')] = 'El precio es obligatorio'
-    else {
-      const n = numero_precio(precio)
-      if (!Number.isFinite(n)) e[clave(i, 'precio')] = 'El precio debe ser un número'
-      else if (n <= 0) e[clave(i, 'precio')] = 'El precio debe ser mayor a 0'
-      else if (n > PRECIO_MAXIMO) e[clave(i, 'precio')] = 'El precio es demasiado alto'
-    }
+    const validacion = validar_precio(precio)
+    if (!validacion.ok) e[clave(i, 'precio')] = validacion.mensaje
   })
   if (!hay_datos) e.productos = 'Cargá al menos un artículo con nombre y precio'
   return e
@@ -627,7 +628,7 @@ async function enviar_precios() {
       nombre: f.nombre.trim(),
       marca: f.marca.trim(),
       presentacion: f.presentacion.trim(),
-      precio: numero_precio(f.precio),
+      precio: validar_precio(f.precio).precio,
     })),
   }
 

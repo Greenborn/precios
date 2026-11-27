@@ -114,7 +114,7 @@ async function parte_base_de_datos() {
         const segundo = await obtener_o_crear_local_sin_local(knex, usuario)
         esperar('se crea un único local "sin local" por usuario', Number(primero.id) === Number(segundo.id))
         esperar('el local tiene sin_local = 1 y el propietario del usuario', Number(primero.sin_local) === 1 && Number(primero.propietario_id) === usuario.id)
-        esperar('sin perfil: el nombre es el nombre de usuario', primero.branch_name === 'Test Carga', `(nombre: ${primero.branch_name})`)
+        esperar('sin perfil: nombre genérico, sin datos del usuario', /^Comercio sin nombre [A-Z2-9]{8}$/.test(primero.branch_name), `(nombre: ${primero.branch_name})`)
         esperar('el local "sin local" no figura en la lista de locales del usuario',
             !(await knex('branch').where({ propietario_id: usuario.id }).whereNull('sin_local').first()))
     } finally {

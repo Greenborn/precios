@@ -33,7 +33,7 @@
                     </div>
                     <div class="col-12 col-md-5">
                         <label for="fecha_carga" class="form-label fw-semibold">Fecha</label>
-                        <input type="date" class="form-control" v-model="datos_formulario.fecha" id="fecha_carga" aria-describedby="fechaHelp">
+                        <input type="date" class="form-control" v-model="datos_formulario.fecha" id="fecha_carga" :max="dia_desde_hoy(1)" aria-describedby="fechaHelp">
                         <small id="fechaHelp" class="form-text gb-text-muted">Solo las fechas de hoy y ayer se muestran en el buscador</small>
                     </div>
                 </div>
@@ -57,7 +57,10 @@
                     <div class="row g-2 flex-grow-1">
                         <div class="col-12 col-sm-6 col-lg-4">
                             <label :for="'product_name' + index" class="form-label small mb-1">Producto</label>
-                            <input type="text" class="form-control" :id="'product_name' + index" v-model="product.nombre" placeholder="Arroz">
+                            <input type="text" class="form-control" :id="'product_name' + index" v-model="product.nombre" placeholder="Arroz"
+                                   :class="{ 'is-invalid': errores_filas[index]?.nombre }" :aria-invalid="errores_filas[index]?.nombre ? 'true' : 'false'"
+                                   @input="delete errores_filas[index]">
+                            <div v-if="errores_filas[index]?.nombre" class="invalid-feedback d-block">{{ errores_filas[index].nombre }}</div>
                         </div>
                         <div class="col-6 col-sm-6 col-lg-3">
                             <label :for="'product_vendor' + index" class="form-label small mb-1">Marca</label>
@@ -71,8 +74,11 @@
                             <label :for="'product_price' + index" class="form-label small mb-1">Precio</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
-                                <input type="text" inputmode="decimal" class="form-control gb-num" :id="'product_price' + index" v-model="product.precio" placeholder="1000">
+                                <input type="text" inputmode="decimal" class="form-control gb-num" :id="'product_price' + index" v-model="product.precio" placeholder="1000"
+                                       :class="{ 'is-invalid': errores_filas[index]?.precio }" :aria-invalid="errores_filas[index]?.precio ? 'true' : 'false'"
+                                       @input="delete errores_filas[index]">
                             </div>
+                            <div v-if="errores_filas[index]?.precio" class="invalid-feedback d-block">{{ errores_filas[index].precio }}</div>
                         </div>
                     </div>
                     <Button variant="ghost" severity="danger" icon="bi-trash" :ariaLabel="'Quitar producto ' + (index + 1)" @click="quitar(index)" />
@@ -96,6 +102,8 @@ import PublicTopBar from "../components/publico/PublicTopBar.vue";
 import PublicFooter from "../components/publico/PublicFooter.vue";
 import { cargar_precios_formulario } from '../api/public/publicEndpoints'
 import { getToken, getUserInfo, setUserInfo } from '../utils/auth'
+import { validar_precio } from '../utils/precio'
+import { dia_desde_hoy, es_fecha_futura, MENSAJE_FECHA_FUTURA } from '../utils/fecha'
 
 import { AppStore } from "../stores/app"
 const storeApp = AppStore()
@@ -103,7 +111,7 @@ const router = useRouter()
 
 const datos_formulario = ref({
     "comercio":"",
-    "fecha": new Date().toISOString().split('T')[0],
+    "fecha": dia_desde_hoy(),
     "productos": [
         { nombre: "", marca: "", presentacion: "", precio: "" }
     ]
@@ -112,7 +120,23 @@ const datos_formulario = ref({
 // ---- UI ----
 const enviando = ref(false)
 const mensajeExito = ref('')
-const cantValidos = computed(() => datos_formulario.value.productos.filter(p => p.nombre.trim() && Number(p.precio) > 0).length)
+const cantValidos = computed(() => datos_formulario.value.productos.filter(p => p.nombre.trim() && validar_precio(p.precio).ok).length)
+
+// Errores por fila: índice -> { nombre?, precio? }. Se limpian al escribir en la fila.
+const errores_filas = ref({})
+const fila_vacia = (p) => ['nombre', 'marca', 'presentacion', 'precio'].every(c => !String(p[c] ?? '').trim())
+function validar_filas(){
+    const errores = {}
+    datos_formulario.value.productos.forEach((p, i) => {
+        if (fila_vacia(p)) return
+        const e = {}
+        if (!p.nombre.trim()) e.nombre = 'El nombre del artículo es obligatorio'
+        const precio = validar_precio(p.precio)
+        if (!precio.ok) e.precio = precio.mensaje
+        if (e.nombre || e.precio) errores[i] = e
+    })
+    return errores
+}
 
 const nombre_completo = computed(() => {
     const u = storeApp.userInfo
@@ -139,6 +163,7 @@ function agregar(){
 
 function quitar(index){
     datos_formulario.value.productos.splice(index, 1)
+    errores_filas.value = {}
 }
 
 async function enviar(){
@@ -147,9 +172,27 @@ async function enviar(){
         return
     }
 
-    const productos_validos = datos_formulario.value.productos.filter(
-        p => p.nombre.trim() && Number(p.precio) > 0
-    )
+    if (es_fecha_futura(datos_formulario.value.fecha)){
+        storeApp.mostrar_alerta(MENSAJE_FECHA_FUTURA)
+        return
+    }
+
+    errores_filas.value = validar_filas()
+    const con_errores = Object.entries(errores_filas.value)
+    if (con_errores.length){
+        storeApp.mostrar_alerta(con_errores
+            .map(([i, e]) => `Fila ${Number(i) + 1}: ${[e.nombre, e.precio].filter(Boolean).join('. ')}`)
+            .join('; '))
+        return
+    }
+
+    // origen[k] = posición en el formulario de la fila k enviada
+    const origen = datos_formulario.value.productos.map((_, i) => i)
+        .filter(i => !fila_vacia(datos_formulario.value.productos[i]))
+    const productos_validos = origen.map(i => {
+        const p = datos_formulario.value.productos[i]
+        return { ...p, precio: validar_precio(p.precio).precio }
+    })
     if (productos_validos.length == 0){
         storeApp.mostrar_alerta("Debe cargar al menos un producto con nombre y precio")
         return
@@ -175,7 +218,7 @@ async function enviar(){
 
         datos_formulario.value = {
             "comercio":"",
-            "fecha": new Date().toISOString().split('T')[0],
+            "fecha": dia_desde_hoy(),
             "productos": [
                 { nombre: "", marca: "", presentacion: "", precio: "" }
             ]
@@ -183,7 +226,12 @@ async function enviar(){
         mensajeExito.value = mensaje
         storeApp.mostrar_alerta(mensaje)
     } else {
-        storeApp.mostrar_alerta(res?.error || res?.text || "Ocurrió un error al guardar los datos")
+        for (const e of (Array.isArray(res?.errores) ? res.errores : [])){
+            if (!e.fila) continue
+            const i = origen[e.fila - 1]
+            errores_filas.value[i] = { ...errores_filas.value[i], [e.campo]: e.mensaje }
+        }
+        storeApp.mostrar_alerta((typeof res?.error === 'string' && res.error) || res?.text || "Ocurrió un error al guardar los datos")
     }
 }
 </script>

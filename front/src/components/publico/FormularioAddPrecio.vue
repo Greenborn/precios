@@ -29,6 +29,7 @@ import { ref } from 'vue'
 import { AppStore } from '../../stores/app'
 import CurrencyInput  from '../../components/genericos/CurrencyInput'
 import { formatMoney } from '../../helpers/formatter'
+import { validar_precio } from '../../utils/precio'
 
 import { cargar_nuevo_precio } from '../../api/public/publicEndpoints'
 
@@ -51,14 +52,15 @@ const CURRENCY_INPUTS_CFG ={
 function cancelar(){ storeApp.ocultar_modal( props.parametros._modal_cod ) }
 
 async function guardar(){
-    if (precio.value <= 0){
-        storeApp.mostrar_alerta('El precio debe ser mayor a 0')
+    const validacion = validar_precio(precio.value)
+    if (!validacion.ok){
+        storeApp.mostrar_alerta(validacion.mensaje)
         return
     }
 
     storeApp.loading = true
     guardando.value = true
-    let res = await cargar_nuevo_precio( { product_id: props.parametros.item.product_id, branch_id: props.parametros.item.branch_id, price: precio.value } );
+    let res = await cargar_nuevo_precio( { product_id: props.parametros.item.product_id, branch_id: props.parametros.item.branch_id, price: validacion.precio } );
     guardando.value = false
     if (res.stat){
         storeApp.loading = false

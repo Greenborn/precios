@@ -90,7 +90,10 @@ function proyectar(f, cols) {
 
 const knex_falso = (nombre) => constructor_builder(nombre)
 knex_falso.transaction = async (cb) => cb(knex_falso)
+knex_falso.client = { config: { client: 'mysql2' } } // lo exige el router de preciosComunitarios
 global.knex = knex_falso
+// Diccionarios en memoria que server.js inicializa al arrancar
+Object.assign(global, { precios_diccio: {}, products_category_diccio: { by_product_id: {}, by_category_id: {} }, branchs_diccio: {}, branch_enterprice_diccio: {}, enterprice_diccio: {} })
 
 // Sesión falsa: el usuario llega por cabecera x-test-user
 const sesion_falsa = (req, res, next) => {

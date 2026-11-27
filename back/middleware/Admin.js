@@ -66,12 +66,17 @@ var paths = [
   { path: "/categorias/add_producto", permisos: ["categorias.editar"] },
   { path: "/categorias/remove_producto", permisos: ["categorias.editar"] },
   { path: "/alias_categorias/list", permisos: ["alias_categorias.listar"] },
+  // Solo sesion aca: el permiso lo exige sso.requirePermission dentro del router CRUD
+  { path: "/alias_categorias" },
+  { path: "/alias_categorias/:id" },
   { path: "/indices_precios/get_all", permisos: ["indices_precios.ver"] },
   { path: "/indices_precios/alias_categoria_disponibles", permisos: ["indices_precios.ver"] },
   { path: "/indices_precios/add_one", permisos: ["indices_precios.crear"] },
   { path: "/indices_precios/put_one", permisos: ["indices_precios.editar"] },
   { path: "/indices_precios/delete_one", permisos: ["indices_precios.eliminar"] },
   { path: "/precios_comunitarios/list", permisos: ["precios.listar"] },
+  // Solo sesion aca: GET y DELETE exigen permiso con sso.requirePermission en el router
+  { path: "/precios_comunitarios/:id" },
   { path: "/precios_hoy/list", permisos: ["precios_hoy.listar"] },
   { path: "/locales/get_all", permisos: ["locales.ver"] },
   { path: "/locales/put_one", permisos: ["locales.editar"] },

@@ -1,10 +1,12 @@
 // Listado de precios del día de hoy, tomado de la caché en memoria (global.precios_diccio).
-// Solo lectura: no consulta la base de datos. Muestra todos los precios vigentes en la caché
-// (incluye los de ayer que todavía no fueron purgados, igual que el buscador).
+// Solo lectura: no consulta la base de datos. Muestra solo precios fechados desde ayer (día
+// de Argentina), también en sucursales de negocio, aunque la caché conserve sus vigentes más
+// antiguos. No hay límite superior: los de mañana (admitidos en las cargas) se muestran.
 //
 // Permisos (recurso "precios_hoy"): precios_hoy.listar.
 const express = require('express')
 const sso = require('../sso')
+const { dia_desde_hoy, interpretar_fecha } = require('../helpers/fecha_precio')
 
 var router = express.Router()
 module.exports = router
@@ -66,11 +68,15 @@ function fila_desde_cache(r) {
   }
 }
 
-// Todas las filas de la caché, deduplicadas por (product_id, branch_id)
+// Filas de la caché (una por product_id y branch_id) fechadas desde ayer
 function todas_las_filas() {
+  const ayer = dia_desde_hoy(-1)
   const filas = []
   for (const pid in global.precios_diccio) {
-    for (const r of global.precios_diccio[pid] || []) filas.push(fila_desde_cache(r))
+    for (const r of global.precios_diccio[pid] || []) {
+      const fecha = interpretar_fecha(r.date_time)
+      if (fecha && fecha.dia >= ayer) filas.push(fila_desde_cache(r))
+    }
   }
   return filas
 }

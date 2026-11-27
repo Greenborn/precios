@@ -22,6 +22,10 @@ const cfg = require('../config/negocio')
 const contactos = require('../helpers/contactos')
 const busqueda_productos = require('../controllers/busqueda_productos')
 const sync_cache = require('../controllers/sync_cache')
+const precios_negocio = require('../controllers/precios_negocio')
+const { validar_precio } = require('../helpers/precio')
+const baja_datos = require('../controllers/baja_datos_usuario')
+const { sincronizar_precio_negocio } = require('../controllers/sincronizacion_precios')
 
 const router = express.Router()
 const knex = global.knex
@@ -194,7 +198,9 @@ router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
     const ids = locales.map((l) => l.id)
     const comercios = [...new Set(locales.map((l) => l.enterprise_id).filter((e) => e != null))]
 
+    let afectados
     await knex.transaction(async (trx) => {
+      afectados = await baja_datos.pares_afectados(trx, uid, ids)
       await trx('price_today').where({ user_id: uid }).del()
       await trx('price').where({ user_id: uid }).del()
       await trx('precios_negocio').where({ usuario_id: uid }).del()
@@ -206,7 +212,10 @@ router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
       await trx('articulo_fotos').where({ user_id: uid }).del()
       await trx('perfiles').where({ usuario_id: uid }).del()
       await contactos.borrarContactosUsuario(uid, trx)
+      await baja_datos.restaurar_price_today(trx, afectados.de_price_today, ids)
     })
+    // Confirmado el borrado: buscador y caches de precios
+    await baja_datos.resincronizar(knex, afectados.pares, ids)
 
     // Locales: reutiliza la baja del repositorio (fotos, comercio huérfano, caché de negocios)
     for (const id of ids) {
@@ -214,11 +223,15 @@ router.delete('/negocio/mi-cuenta/datos', sesion, async (req, res) => {
         if (f.startsWith(`${id}_`)) fs.unlinkSync(path.join(cfg.FOTOS_DIR, f))
       }
       await localesRepo.eliminar(id)
+      baja_datos.quitar_local(id)
     }
     // Comercios (enterprice) del usuario: se quitan sólo si ya no les queda ningún local
     for (const eid of comercios) {
       const quedan = await knex('branch').where({ enterprise_id: eid }).first('id')
-      if (!quedan) await knex('enterprice').where({ id: eid }).del()
+      if (!quedan) {
+        await knex('enterprice').where({ id: eid }).del()
+        baja_datos.quitar_comercio(eid)
+      }
     }
     borrar_img_perfil(`${uid}_portada.`)
     borrar_img_perfil(`${uid}_foto.`)
@@ -341,15 +354,6 @@ router.delete('/negocio/locales/:branchId/articulos/:productId/foto', sesion_neg
 // Último precio por (producto, local) del usuario. Lectura directa de la tabla propia, sin
 // recorrer price. Sólo devuelve filas con usuario_id = req.user.id.
 const ID_PRECIO = /^[A-Za-z0-9-]{1,36}$/
-const PRECIO_MAX = 999999999.99
-
-// Valida un precio: número positivo, máximo 2 decimales y dentro de rango
-function precio_valido(valor) {
-  const n = Number(String(valor ?? '').trim().replace(',', '.'))
-  if (!Number.isFinite(n) || n <= 0 || n > PRECIO_MAX) return null
-  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) return null   // más de 2 decimales
-  return Math.round(n * 100) / 100
-}
 
 router.get('/negocio/mis-precios', sesion_negocio, async (req, res) => {
   try {
@@ -402,11 +406,12 @@ async function precio_propio(id, usuario_id) {
 
 // PUT /negocio/mis-precios/:id  body: { precio }  -> edita sólo el precio del propio usuario.
 // Propaga a price (histórico), price_today (si es el vigente) y buscador/caché.
+// En locales de negocio el vigente es el último de price, esté o no en price_today.
 router.put('/negocio/mis-precios/:id', sesion_negocio, async (req, res) => {
   const id = String(req.params.id || '')
   if (!ID_PRECIO.test(id)) return res.status(400).json({ error: 'Identificador de precio inválido' })
-  const precio = precio_valido(req.body?.precio)
-  if (precio === null) return res.status(422).json({ error: 'El precio debe ser un número positivo con hasta 2 decimales' })
+  const { ok, precio, mensaje } = validar_precio(req.body?.precio)
+  if (!ok) return res.status(422).json({ error: mensaje })
 
   try {
     const propio = await precio_propio(id, req.user.id)
@@ -418,8 +423,13 @@ router.put('/negocio/mis-precios/:id', sesion_negocio, async (req, res) => {
       await trx('price_today').where({ price_id: id }).update({ price: precio })
     })
 
-    // Sincroniza buscador y caches si el precio editado es el vigente
-    const vigente = await knex('price_today').where({ price_id: id }).first()
+    // Sincroniza buscador y caches con el precio vigente
+    const es_local_negocio = precios_negocio.es_negocio(propio.branch_id)
+    if (es_local_negocio) {
+      await sincronizar_precio_negocio(propio.product_id, propio.branch_id)
+    }
+    // Resto de los locales: sólo si el precio editado es el de price_today
+    const vigente = es_local_negocio ? null : await knex('price_today').where({ price_id: id }).first()
     if (vigente) {
       const producto = await knex('products').where({ id: vigente.product_id }).first('name')
       const datos = { ...vigente, price: precio, product_name: producto?.name || vigente.product_name || null }
@@ -464,7 +474,6 @@ router.delete('/negocio/mis-precios/:id', sesion_negocio, async (req, res) => {
 //   GET /api/negocio/publico/:perfilId/productos?limit&offset -> último precio por producto y local
 // :perfilId es perfiles.id (la misma clave que /api/perfil/publico/:id).
 // Solo datos públicos: nunca user_id, user_nombre, user_apellido ni emails.
-const precios_negocio = require('../controllers/precios_negocio')
 const LIMITE_PRODUCTOS_DEFAULT = 50
 const LIMITE_PRODUCTOS_MAX = 200
 

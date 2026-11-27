@@ -4,6 +4,8 @@
 // en price_today. Para cada (product_id, branch_id) de un negocio vale el último
 // registro de `price`; al cargar uno nuevo, el anterior queda invalidado (se
 // reemplaza en caches y buscador).
+// `price` es la unica fuente para negocios: price_today solo conserva hoy y ayer para
+// todos los locales (puede tener filas de negocio, pero nada depende de ellas).
 
 // Conjunto de sucursales de negocios, para consultas síncronas (buscador, caches)
 const ids_negocio = new Set()
@@ -28,6 +30,26 @@ function es_negocio(branch_id) {
 function marcar(branch_id, esNegocio) {
   if (esNegocio) ids_negocio.add(String(branch_id))
   else ids_negocio.delete(String(branch_id))
+}
+
+function columnas_precio() {
+  return [
+    'price.id as id',
+    'price.id as price_id',
+    'price.product_id',
+    'price.price',
+    'price.date_time',
+    'price.time',
+    'price.branch_id',
+    'price.es_oferta',
+    'price.confiabilidad',
+    'price.notas',
+    'price.url',
+    'price.user_id',
+    'price.user_nombre',
+    'price.user_apellido',
+    'products.name as product_name',
+  ]
 }
 
 // Consulta (builder, sin ejecutar) del último precio de cada (product_id, branch_id)
@@ -55,23 +77,20 @@ function consulta_ultimos_precios(knex, ids) {
         .whereRaw('p2.date_time = price.date_time')
         .whereRaw('p2.id > price.id')
     })
-    .select(
-      'price.id as id',
-      'price.id as price_id',
-      'price.product_id',
-      'price.price',
-      'price.date_time',
-      'price.time',
-      'price.branch_id',
-      'price.es_oferta',
-      'price.confiabilidad',
-      'price.notas',
-      'price.url',
-      'price.user_id',
-      'price.user_nombre',
-      'price.user_apellido',
-      'products.name as product_name'
-    )
+    .select(columnas_precio())
+}
+
+// Precio vigente de un producto en un local de negocio (undefined si no le queda ninguno)
+async function ultimo_precio(knex, product_id, branch_id) {
+  // Consulta directa por producto: se ejecuta en cada escritura y price no tiene indice por branch_id
+  return knex('price')
+    .join('products', 'products.id', 'price.product_id')
+    .where('price.product_id', product_id)
+    .where('price.branch_id', branch_id)
+    .orderBy('price.date_time', 'desc')
+    .orderBy('price.id', 'desc')
+    .select(columnas_precio())
+    .first()
 }
 
 // Último precio de cada (product_id, branch_id) de sucursales de negocios, sin ventana
@@ -93,4 +112,4 @@ async function combinar(knex, filas) {
   return [...resto, ...negocio.map(r => ({ ...r, negocio: true }))]
 }
 
-module.exports = { cargar_ids, es_negocio, marcar, ultimos_precios, consulta_ultimos_precios, combinar }
+module.exports = { cargar_ids, es_negocio, marcar, ultimo_precio, ultimos_precios, consulta_ultimos_precios, combinar }

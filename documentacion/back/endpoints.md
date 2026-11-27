@@ -25,6 +25,27 @@ Documentación completa de todos los endpoints REST disponibles en la API de Pre
 
 ---
 
+## 🔒 Datos de quien cargó un precio
+
+Las respuestas públicas pasan por `back/helpers/precio_publico.js`, que sanea copias (las cachés en memoria no se modifican):
+
+| Dato | Salida pública |
+|------|----------------|
+| `user_id` | Nunca se devuelve |
+| `user_nombre`, `user_apellido` | Solo en precios de locales comunes. No se devuelven en locales de negocio (`branch.propietario_id` no nulo, incluido el "sin local") ni cuando la sucursal no está en el diccionario en memoria |
+
+| Endpoint | Autor |
+|----------|-------|
+| `GET /publico/busqueda/precios` | Según la tabla anterior |
+| `GET /publico/busqueda/promociones` | Sin datos de autor |
+| `GET /publico/productos/all` | Según la tabla anterior |
+| `GET /publico/estadistica/data?id_estadistica=variacion_precio&id_producto=UUID&id_local=ID` | Nunca (ningún dato de usuario, tampoco en locales comunes). Devuelve el resto de las columnas de `price` |
+| `GET /api/negocio/publico/:perfilId/productos` | Nunca (lista blanca propia) |
+
+Los endpoints de administración y los de datos propios con sesión no pasan por este saneo.
+
+---
+
 ## 🔍 Búsqueda
 
 ### Buscar Precios de Productos
@@ -42,6 +63,7 @@ GET /publico/busqueda/precios?product_name=TÉRMINO
 - ✅ Búsqueda case-insensitive
 - ✅ Indexación en memoria ultrarrápida
 - ✅ Dinámicamente actualizado en cada importación
+- 📅 Precios de productos: de los locales comunes solo se devuelven los de hoy y ayer; los de locales de negocio (`branch.propietario_id` no nulo) están siempre vigentes y no se filtran por antigüedad
 - 🔄 Si contiene "alquiler" → busca propiedades de alquiler
 
 **Respuesta 200 (Éxito)**:
@@ -140,6 +162,16 @@ GET /publico/busqueda/comercios_promociones
 
 ---
 
+### Sugerencias de búsqueda
+
+```http
+GET /publico/busqueda/sugerencias?q=texto
+```
+
+Pública (sin sesión). Devuelve `{ "stat": true, "items": ["nombre", ...] }` con hasta 8 nombres; con menos de 3 caracteres, lista vacía.
+
+---
+
 ### Información de Comercio por URL
 
 ```http
@@ -153,7 +185,8 @@ GET /publico/busqueda/info_comercio?website=URL
 
 **Comportamiento**:
 - ✅ Busca empresa por el campo `website`
-- ✅ Retorna datos de la empresa + todas sus sucursales
+- ✅ Retorna datos de la empresa + sus sucursales (excepto las internas "sin local")
+- 🔒 De cada sucursal solo se devuelven campos públicos: `id`, `enterprise_id`, `name`, `branch_name`, `address`, `address_road`, `address_number`, `city`, `latitude`, `longitude`. Lo mismo vale para `locales` en `/publico/busqueda/precios` y `/promociones`
 
 **Respuesta 200**:
 ```json
@@ -330,6 +363,37 @@ GET /publico/productos/all?category_id=ID
 
 ---
 
+### Regla de validación de precios
+
+Aplica a `cargar_nuevo_precio`, `cargar_precios_formulario`, `cargar_precios_negocio` y `PUT /api/negocio/mis-precios/:id` (`back/helpers/precio.js`; el front la replica en `front/src/utils/precio.js`). Se valida antes de tocar la base, porque `price.price` es `decimal(10,2)`.
+
+| Condición | Mensaje |
+|-----------|---------|
+| Ausente o vacío | `El precio es obligatorio` |
+| No numérico: texto, notación exponencial o hexadecimal, más de un separador (`1.234,56`), booleanos, arreglos u objetos | `El precio debe ser un número` |
+| Menor o igual a 0 tras redondear a 2 decimales (incluye `0.001`) | `El precio debe ser mayor a 0` |
+| Mayor que `99999999.99` | `El precio no puede superar 99.999.999,99` |
+| Más de 2 decimales (en texto se cuentan los escritos: `1.500` se rechaza) | `El precio admite hasta 2 decimales, sin separador de miles` |
+
+En texto se acepta punto o coma decimal.
+
+Importadores (`/importar` y worker de la cola): mismo rango, pero los decimales de más se redondean y no se acepta coma decimal.
+
+---
+
+### Regla de fechas de las cargas
+
+Ninguna carga admite fechas posteriores a **mañana** según el calendario de Argentina (hoy y mañana se aceptan). La aplican `cargar_precios_formulario`, `cargar_precios_negocio`, `estadistica/precios_usuarios`, `/importar`, `/importar_oferta` y el worker (productos y ofertas), con `back/helpers/fecha_precio.js`; la replican `front/src/utils/fecha.js` y `validar_fecha()` en Python.
+
+| Condición | Mensaje |
+|-----------|---------|
+| Posterior a mañana | `La fecha no puede ser posterior a mañana` |
+| Formato no reconocido o inexistente | `La fecha no es válida` |
+
+Formatos aceptados: `YYYY-MM-DD` o `YYYY-MM-DD[T ]HH:MM[:SS[.fracción]]`, con zona opcional (`Z`, `±HH:MM`). En las importaciones, un valor con zona se convierte a hora de Argentina antes de guardarlo (en el worker y en `importar_productos.js`). Se valida antes de tocar la base. En los formularios el error sale en `errores` con `campo: "fecha"` (HTTP 400 en `cargar_precios_negocio`, 200 con `stat: false` en el resto). `cargar_nuevo_precio` usa siempre la fecha del servidor.
+
+---
+
 ### Cargar Nuevo Precio
 
 ```http
@@ -354,6 +418,12 @@ PUT /publico/productos/cargar_nuevo_precio
 - ✅ Max 1 corrección por combinación producto-sucursal
 - ✅ Marca confiabilidad = 50
 - ✅ Registra autor (`user_id`, `user_nombre`, `user_apellido`)
+- ✅ `price` cumple la [regla de precios](#regla-de-validación-de-precios); un precio inválido no consume la cuota por IP
+
+**Respuesta 200 (Precio inválido)**:
+```json
+{ "stat": false, "error": "El precio debe ser mayor a 0", "errores": [{ "campo": "precio", "mensaje": "El precio debe ser mayor a 0" }] }
+```
 
 **Respuesta 200 (Éxito)**:
 ```json
@@ -402,10 +472,20 @@ PUT /publico/productos/cargar_precios_formulario
 
 **Comportamiento**:
 - 🔎 Resuelve el producto por alias/nombre (`products_diccio`, `alias_productos`, `products`); si no existe lo crea junto a su alias
-- 🏪 Resuelve el comercio por nombre (`enterprice` case-insensitive) y su primera sucursal; si no existe crea empresa+sucursal y regenera diccionarios
-- 📅 Solo las fechas dentro de la ventana hoy+ayer entran a `price_today` y al buscador; las anteriores quedan solo en el histórico `price`
+- 🏪 Resuelve el comercio por nombre (`enterprice` case-insensitive) y su primera sucursal, sin contar los locales internos "sin local"; si no existe crea empresa+sucursal y regenera diccionarios (si la empresa solo tiene un "sin local", le agrega una sucursal común)
+- 📅 Solo las fechas dentro de la ventana hoy+ayer entran a `price_today` y al buscador; las anteriores quedan solo en el histórico `price` (en locales de negocio se muestra siempre el último de `price`)
 - ✍️ Cada precio queda con `user_id` / `user_nombre` / `user_apellido` y `confiabilidad = 50`
 - ✅ Rate limit: mínimo 3s entre envíos y máximo 100 envíos diarios por IP; hasta 100 productos por envío
+- ✅ Todas las filas se validan antes de tocar la base (nombre obligatorio y [regla de precios](#regla-de-validación-de-precios)). Si alguna es inválida, o hay más de 100, no se carga ninguna. Las filas totalmente vacías se ignoran
+
+**Respuesta 200 (Filas inválidas)** (`fila` es la posición, desde 1, en `productos`):
+```json
+{
+  "stat": false,
+  "error": "Fila 2: El precio no puede superar 99.999.999,99",
+  "errores": [{ "fila": 2, "campo": "precio", "mensaje": "El precio no puede superar 99.999.999,99" }]
+}
+```
 
 **Respuesta 200 (Éxito)**:
 ```json
@@ -422,87 +502,26 @@ PUT /publico/productos/cargar_precios_formulario
 
 ---
 
+### Precios de hoy (admin)
+
+**GET /admin/precios_hoy/list** (permiso `precios_hoy.listar`). Lee la caché en memoria y muestra solo precios fechados **desde ayer** (día de Argentina), también en sucursales de negocio, aunque la caché y las vistas públicas conserven sus vigentes más antiguos. No tiene límite superior: los fechados mañana se muestran. Si el precio vigente en caché de un producto y sucursal es anterior a ayer, ese par no aparece.
+
+---
+
 ### Listar / Eliminar Precios Cargados por Usuarios (admin)
 
 | Endpoint | Método | Permiso | Descripción |
 |----------|--------|---------|-------------|
 | `/admin/precios_comunitarios/get_all` | GET | `precios.ver` | Listado paginado (contrato TableEditor) de precios con autor (`price.user_id IS NOT NULL`) |
-| `/admin/precios_comunitarios/delete_one` | DELETE | `precios.eliminar` | Elimina un precio cargado por usuario; restaura el precio anterior en `price_today`/buscador/caches si correspondía |
+| `/admin/precios_comunitarios/delete_one` | DELETE | `precios.eliminar` | Elimina un precio cargado por usuario; borra su copia en `precios_negocio`; restaura el precio anterior si es de hoy o ayer |
 
-**DELETE /admin/precios_comunitarios/delete_one** body: `{ "id": "uuid-price" }`. Solo admite precios con `user_id` asignado. Si el precio era el vigente en `price_today`, se restaura el registro más reciente de `price` del mismo producto+sucursal (o se elimina `price_today` y se saca del buscador si no hay otro).
+**DELETE /admin/precios_comunitarios/delete_one** body: `{ "id": "uuid-price" }`. Solo admite precios con `user_id` asignado. También borra la copia en `precios_negocio`. Si el precio era el vigente en `price_today`, se restaura el registro más reciente de `price` del mismo producto+sucursal solo si es de hoy o ayer; si no, se elimina de `price_today`, buscador y cachés. En locales de negocio buscador y cachés quedan con el último de `price`, de cualquier fecha.
 
 ---
 
 ## 📥 Importación
 
-### Importar Artículos de Plataforma
-
-```http
-POST /publico/productos/importar_articulo_plataforma
-```
-
-**Body JSON**:
-```json
-[
-  {
-    "name": "Leche La Serenísima 1L",
-    "price": 1250,
-    "currency": "ARS",
-    "category_name": "Almacén > Lácteos",
-    "url": "https://mercadolibre.com/...",
-    "plataforma": "ml",
-    "enterprise_id": 1,
-    "branch_id": 5
-  }
-]
-```
-
-**Campos**:
-| Campo | Tipo | Requerido | Descripción |
-|-------|------|----------|-------------|
-| `name` | string | ✅ | Nombre del producto (normalizado) |
-| `price` | number | ✅ | Precio en la moneda especificada |
-| `currency` | string | ✅ | ISO 4217 (ARS, USD, etc.) |
-| `category_name` | string | ✅ | Ruta: "Categoría > Subcategoría" |
-| `url` | string | ❌ | URL del producto en plataforma |
-| `plataforma` | string | ✅ | "ml" (MercadoLibre) o "region20" |
-| `enterprise_id` | number | ✅ | ID de la empresa |
-| `branch_id` | number | ✅ | ID de la sucursal |
-
-**Características**:
-- 🔄 Procesamiento asíncrono (no bloquea)
-- 📋 Cola en memoria (max 50 items/ciclo)
-- 🔁 Reintento automático de errores
-- 🔒 Validación de `product_id + branch_id`
-- 📊 Calcula automáticamente estadísticas de cambio
-
-**Respuesta 200 (Aceptado)**:
-```json
-{
-  "stat": true,
-  "message": "Importación en cola",
-  "queued_items": 1,
-  "total_in_queue": 5
-}
-```
-
-**Respuesta 400 (Validación)**:
-```json
-{
-  "stat": false,
-  "error": "Invalid items format",
-  "details": [
-    {
-      "index": 0,
-      "error": "name is required"
-    }
-  ]
-}
-```
-
----
-
-### Importación Masiva (Alternativa)
+### Importación Masiva
 
 ```http
 POST /publico/productos/importar
@@ -524,9 +543,12 @@ POST /publico/productos/importar
 ```
 
 **Notas**:
-- 🔐 Requiere clave `KEY_INT` (variable de entorno)
+- 🔐 Requiere clave `KEY_INT` (variable de entorno). En todos los endpoints con clave se rechaza si la variable no está configurada o la petición no la envía
 - 🔄 Cola asíncrona con procesamiento en background
 - Respuesta inmediata sin esperar procesamiento
+- ⛔ Los items sin `branch_id` existente o con `price` inválido (ver [regla de precios](#regla-de-validación-de-precios), variante importadores) no se encolan: se registran en `extra_services/logs/descartados.csv` y se cuentan en `rechazados`
+- ⛔ Tampoco se encolan los items de **sucursales de negocio** (`branch.propietario_id` no nulo, incluido el "sin local") ni los que traen `fecha_registro` posterior a mañana o no válida ([regla de fechas](#regla-de-fechas-de-las-cargas)). La regla de negocio es solo por el `branch_id` del item: no alcanza a otras sucursales de la empresa ni al producto. El worker la repite antes de escribir (precios nuevos y reconfirmaciones) y registra el descarte en el mismo CSV
+- `/importar_oferta` descarta con el mismo criterio de fechas y responde `rechazados`; las ofertas no escriben precios de producto, por lo que no se bloquean en sucursales de negocio
 
 **Respuesta 200**:
 ```json
@@ -699,7 +721,7 @@ Content-Type: application/json
 | Campo | Ubicación | Tipo | Requerido | Reglas |
 |-------|-----------|------|-----------|--------|
 | `id` | path | string | Sí | `[A-Za-z0-9-]`, hasta 36 caracteres (id del precio) |
-| `precio` | body | number | Sí | Mayor que 0, máximo `999999999.99`, hasta 2 decimales; acepta coma decimal |
+| `precio` | body | number | Sí | Ver [regla de precios](#regla-de-validación-de-precios) |
 
 ```json
 { "precio": 1300 }
@@ -722,13 +744,26 @@ Content-Type: application/json
 | 401 | Sin sesión | `{ "error": "No hay sesión activa", "code": "DO_LOGIN" }` |
 | 403 | Cuenta no es de negocio | `{ "error": "Tu cuenta no está configurada como negocio", "code": "NO_NEGOCIO" }` |
 | 404 | El precio no existe o es de otro usuario (no se revela cuál) | `{ "error": "Precio no encontrado" }` |
-| 422 | Precio no válido (no numérico, ≤ 0, > máximo, más de 2 decimales) | `{ "error": "El precio debe ser un número positivo con hasta 2 decimales" }` |
+| 422 | Precio no válido (vacío, no numérico, ≤ 0, > máximo, más de 2 decimales) | `{ "error": "<mensaje de la regla de precios>" }` |
 | 500 | Error interno | `{ "error": "No se pudo editar el precio" }` |
 
 #### Características
 - **Propiedad**: se verifica en el servidor (`usuario_id = req.user.id`). `usuario_id` del body no se acepta.
 
 ---
+
+### Eliminar un local
+
+**DELETE** `/api/mis-locales/:id` (sesión de negocio; solo el dueño del local)
+
+Baja permanente: además del local, sus fotos y su comercio si queda sin locales, borra **todos los precios del local, incluido el histórico** (también los cargados por otros usuarios en él). No se puede deshacer. Detalle de tablas y cachés en la [definición técnica](../definicion_tecnica.md#baja-de-un-local).
+
+| Código | Caso |
+|--------|------|
+| 204 | Local eliminado |
+| 401 / 403 | Sin sesión, cuenta no marcada como negocio o local ajeno |
+| 404 | El local no existe |
+| 500 | Falló la transacción; no se borra nada |
 
 ### Eliminar precio propio
 **DELETE** `/api/negocio/mis-precios/:id`
@@ -749,7 +784,7 @@ x-api-key: <token de sesión>
 ```
 
 #### Efectos
-- Borra la fila en `precios_negocio`, en `price` y, si era el vigente, restaura en `price_today` el precio anterior (misma lógica que `eliminar_precio` de `/admin/precios_comunitarios`).
+- Borra la fila en `precios_negocio`, en `price` y, si era el vigente, restaura en `price_today` el precio anterior si es de hoy o ayer (misma lógica que `eliminar_precio` de `/admin/precios_comunitarios`).
 - Quita o actualiza buscador y cachés en memoria.
 - Si la fila existe en `precios_negocio` pero no en `price` (inconsistencia previa), sólo se limpia la copia.
 
@@ -1141,7 +1176,7 @@ Igual que 1.5, los errores de validación responden **HTTP 200** con `stat: fals
 | Endpoint | Método | Permiso | Descripción |
 |----------|--------|---------|-------------|
 | `/user/get_all` | GET | `usuarios.ver` | Listado paginado (rows + fields_def) |
-| `/user/add_one` | POST | `usuarios.crear` | Crear usuario con roles |
+| `/user/add_one` | POST | `usuarios.crear` | Crear usuario (con `roles`: solo administrador) |
 | `/user/put_one` | PUT | `usuarios.editar` | Actualizar usuario y sus roles |
 | `/user/delete_one` | DELETE | `usuarios.eliminar` | Eliminar usuario |
 
@@ -1185,10 +1220,10 @@ Respuesta: `{ stat: true, data: { rows, fields_def, total, page, pageSize } }`.
 |----------|--------|---------|-------------|
 | `/rbac/get_roles` | GET | `roles.ver` | Listar roles |
 | `/rbac/nuevo_rol` | POST | `roles.crear` | Crear rol |
-| `/rbac/editar_rol` | PUT | `roles.editar` | Editar rol |
+| `/rbac/editar_rol` | PUT | `roles.editar` | Editar rol (renombrar: solo administrador; `administrador` no se renombra) |
 | `/rbac/eliminar_rol` | DELETE | `roles.eliminar` | Eliminar rol (protege `administrador`) |
-| `/rbac/asignar_permiso_rol` | POST | `roles.editar` | Vincular permiso a rol |
-| `/rbac/asignar_usuario_rol` | POST | `usuarios.editar` | Asignar rol a usuario |
+| `/rbac/asignar_permiso_rol` | POST | `roles.editar` + administrador | Vincular permiso a rol |
+| `/rbac/asignar_usuario_rol` | POST | `usuarios.editar` + administrador | Asignar rol a usuario |
 
 ### 4. Gestión de Permisos (`/admin/rbac/*`)
 
@@ -1196,7 +1231,7 @@ Respuesta: `{ stat: true, data: { rows, fields_def, total, page, pageSize } }`.
 |----------|--------|---------|-------------|
 | `/rbac/get_permisos` | GET | `permisos.ver` | Listar permisos |
 | `/rbac/nuevo_permiso` | POST | `permisos.crear` | Crear permiso |
-| `/rbac/editar_permiso` | PUT | `permisos.editar` | Editar permiso |
+| `/rbac/editar_permiso` | PUT | `permisos.editar` | Editar permiso (renombrar: solo administrador) |
 | `/rbac/eliminar_permiso` | DELETE | `permisos.eliminar` | Eliminar permiso |
 
 ### 5. Gestión de Rutas (`/admin/rbac/*`)
@@ -1220,6 +1255,7 @@ Respuesta: `{ stat: true, data: { rows, fields_def, total, page, pageSize } }`.
 #### Características generales del RBAC
 - **Autenticación**: Requerida en todos los endpoints `/admin/*` excepto `/admin/user/login`.
 - **Permisos**: Validados por el middleware `helpers/authorization.js` según el permiso declarado por ruta.
+- **Otorgar roles o permisos** exige además el rol `administrador` (si no: `{ "stat": false, "text": "..." }`). Solo un administrador puede usar el email del admin único (`ADMIN_EMAIL`) en `add_one` o `guardar_config`.
 - **Formato**: Respuestas de listado usan el contrato del `TableEditor` (`rows` + `fields_def`).
 - **Roles base**: `administrador` (acceso total) y `usuario` (puede publicar precios vía formulario; rol por defecto de los usuarios creados vía SSO).
 - **Seed**: `scripts/seed_rbac.js` (idempotente) crea los roles, 20 permisos base, las rutas del panel y asegura el **admin único** (`ADMIN_EMAIL`, por defecto `lucho.2012.tandil@gmail.com`): remueve el rol `administrador` de cualquier otro usuario y lo asigna al admin único en su primer login SSO (`sso.js::asegurar_rol_admin`).
@@ -1269,25 +1305,7 @@ curl -X GET "http://localhost:3001/publico/busqueda/precios?product_name=leche"
 }
 ```
 
-### 2. Importar Precios Nuevos
-
-```bash
-curl -X POST "http://localhost:3001/publico/productos/importar_articulo_plataforma" \
-  -H "Content-Type: application/json" \
-  -d '[
-    {
-      "name": "Leche 1L",
-      "price": 1250,
-      "currency": "ARS",
-      "category_name": "Almacén > Lácteos",
-      "plataforma": "ml",
-      "enterprise_id": 1,
-      "branch_id": 5
-    }
-  ]'
-```
-
-### 3. Actualizar Precio Existente
+### 2. Actualizar Precio Existente
 
 ```bash
 curl -X PUT "http://localhost:3001/publico/productos/cargar_nuevo_precio" \

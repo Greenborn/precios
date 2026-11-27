@@ -1,8 +1,10 @@
 const express = require('express')
+const { validar_fecha_precio } = require('../helpers/fecha_precio')
 var router = express.Router()
 module.exports = router
 const bcrypt = require('bcrypt')
 const fs = require("fs")
+const { precios_publicos } = require("../helpers/precio_publico")
 
 router.get('/data', async function (req, res) {
     console.log("query ", req.query)
@@ -46,7 +48,8 @@ router.get('/data', async function (req, res) {
             case "variacion_precio":
                 let precios = await global.knex('price')
                                 .where({ product_id: ID_PRODUCTO, branch_id: ID_LOCAL })
-                res.status(200).send({ stat: true, items: precios })           
+                // Historial publico: sin ningun dato de quien cargo cada precio
+                res.status(200).send({ stat: true, items: precios_publicos(precios, { con_autor: false }) })
                 break;
 
             default:
@@ -66,6 +69,14 @@ router.post('/precios_usuarios', async function (req, res) {
     
     try {
         let prom_arr = []
+        if (req.body.fecha != null && req.body.fecha !== "") {
+            const fecha = validar_fecha_precio(req.body.fecha)
+            if (!fecha.ok) {
+                res.status(200).send({ stat: false, items: [], error: fecha.mensaje, errores: [{ campo: 'fecha', mensaje: fecha.mensaje }] })
+                return
+            }
+            req.body.fecha = fecha.fecha
+        }
         if (typeof req.body.fecha == "string")
             req.body.fecha = new Date(req.body.fecha)
         for (let i=0; i < req.body.productos.length && i < 100; i++){

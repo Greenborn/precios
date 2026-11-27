@@ -3,10 +3,41 @@
 //   negocio del local -> enterprice (cada local nuevo crea su enterprice con el mismo nombre)
 // Además: código identificador único por local nuevo y control de duplicados.
 const crypto = require('crypto')
+const fs = require('fs')
+const path = require('path')
+const cfg = require('../config/negocio')
+const baja_datos = require('../controllers/baja_datos_usuario')
 const precios_negocio = require('../controllers/precios_negocio')
+const { sincronizar_comercio } = require('../controllers/comercios_cache')
 
 // Sin caracteres ambiguos (0/O, 1/I)
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+// Tablas con filas propias de un local (columna branch_id), que se borran junto con él.
+// price_today va primero: tiene FK RESTRICT hacia branch.
+// `promociones` (archivo histórico de ofertas importadas) se conserva.
+const TABLAS_DEL_LOCAL = [
+  'price_today',
+  'price',
+  'precios_negocio',
+  'promociones_hoy',
+  'estadistica_aumento_diario',
+  'branch_category',
+  'articulo_fotos',
+]
+
+// Archivos de fotos de artículos del local (`<branch_id>_<product_id>.<ext>`).
+// Nunca lanza: la baja ya está confirmada.
+function borrar_fotos_local(branch_id) {
+  try {
+    if (!fs.existsSync(cfg.FOTOS_DIR)) return
+    for (const f of fs.readdirSync(cfg.FOTOS_DIR)) {
+      if (f.startsWith(`${branch_id}_`)) fs.rmSync(path.join(cfg.FOTOS_DIR, f), { force: true })
+    }
+  } catch (error) {
+    console.error(`[locales_branch] No se pudieron borrar las fotos del local ${branch_id}`, error)
+  }
+}
 
 function generar_codigo() {
   const bytes = crypto.randomBytes(8)
@@ -48,17 +79,33 @@ function aColumnas(datos = {}) {
   return cols
 }
 
+function nombre_generico() {
+  return `Comercio sin nombre ${generar_codigo().slice(4)}`
+}
+
+// enterprice.name es unico: si el nombre comercial ya esta tomado se le agrega un sufijo
+async function nombre_comercio_libre(knex, nombre_comercial) {
+  let nombre = nombre_comercial || nombre_generico()
+  for (let i = 0; i < 10; i++) {
+    if (!(await knex('enterprice').where({ name: nombre }).first())) return nombre
+    nombre = nombre_comercial ? `${nombre_comercial} (${generar_codigo().slice(4)})` : nombre_generico()
+  }
+  throw new Error('No se pudo generar un nombre de comercio único')
+}
+
 // Local "sin local" del usuario: se crea una sola vez (branch con sin_local = 1 y su enterprice)
 // y se reutiliza en envíos posteriores. Nombre = nombre comercial del perfil o, si no está
-// definido, el nombre de usuario. No es un local publicable (publicado = false).
+// definido, uno genérico (nunca el nombre y apellido del usuario). No es un local publicable
+// (publicado = false).
 async function obtener_o_crear_local_sin_local(knex, usuario) {
   const buscar = () => knex('branch').where({ propietario_id: usuario.id, sin_local: 1 }).first()
   const existente = await buscar()
   if (existente) return existente
 
   const perfil = await knex('perfiles').where({ usuario_id: usuario.id }).first('nombre_comercial')
-  const nombre_usuario = [usuario.name, usuario.apellido].filter(Boolean).join(' ').trim()
-  const nombre = (String(perfil?.nombre_comercial || '').trim() || nombre_usuario || `Usuario ${usuario.id}`).slice(0, 200)
+  // 189 + sufijo " (XXXXXXXX)" = 200, el largo de branch_name
+  const nombre_comercial = String(perfil?.nombre_comercial || '').trim().slice(0, 189).trim()
+  const nombre = await nombre_comercio_libre(knex, nombre_comercial)
 
   let codigo = null
   for (let i = 0; i < 10 && !codigo; i++) {
@@ -81,6 +128,7 @@ async function obtener_o_crear_local_sin_local(knex, usuario) {
       return Number(nuevoId)
     })
     precios_negocio.marcar(id, true)
+    await sincronizar_comercio(knex, { branch_id: id })
     return await knex('branch').where({ id }).first()
   } catch (error) {
     // Carrera con otro envío simultáneo: si ya quedó creado, se usa ese
@@ -128,6 +176,7 @@ function createLocalesRepoBranch(knex) {
         return Number(id)
       })
       precios_negocio.marcar(nuevoId, true)
+      await sincronizar_comercio(knex, { branch_id: nuevoId })
       return aPaquete(await base().where({ id: nuevoId }).first())
     },
     async actualizar(id, cambios) {
@@ -141,15 +190,22 @@ function createLocalesRepoBranch(knex) {
           await trx('enterprice').where({ id: fila.enterprise_id }).update({ name: cols.branch_name })
         }
       })
+      await sincronizar_comercio(knex, { branch_id: id })
       return aPaquete(await base().where({ id }).first())
     },
+    // Baja definitiva: borra también los precios del local (histórico incluido), de
+    // cualquier usuario. El control de propiedad lo hace el llamador (router de locales).
     async eliminar(id) {
-      return knex.transaction(async (trx) => {
-        const fila = await trx('branch').where({ id }).first()
+      let fila = null
+      let afectados = null
+      const eliminado = await knex.transaction(async (trx) => {
+        fila = await trx('branch').where({ id }).first()
         if (!fila) return false
-        await trx('articulo_fotos').where({ branch_id: id }).del()
-        await trx('branch').where({ id }).del()
-        precios_negocio.marcar(id, false)
+        // Se usa el id de la fila: el recibido llega como texto desde la URL
+        const branch_id = fila.id
+        afectados = await baja_datos.pares_afectados(trx, null, [branch_id])
+        for (const tabla of TABLAS_DEL_LOCAL) await trx(tabla).where({ branch_id }).del()
+        await trx('branch').where({ id: branch_id }).del()
         // Si el comercio ya no tiene locales, se quita junto con el local
         const quedan = await trx('branch').where({ enterprise_id: fila.enterprise_id }).first()
         if (!quedan && fila.enterprise_id) {
@@ -157,6 +213,17 @@ function createLocalesRepoBranch(knex) {
         }
         return true
       })
+      if (!eliminado) return false
+      // Confirmada la baja: buscador y caches de precios, diccionarios, marca de negocio y fotos
+      try {
+        await baja_datos.resincronizar(knex, afectados.pares, [fila.id])
+      } catch (error) {
+        console.error(`[locales_branch] No se pudieron limpiar las caches del local ${fila.id}`, error)
+      }
+      precios_negocio.marcar(fila.id, false)
+      await sincronizar_comercio(knex, { branch_id: fila.id, enterprise_id: fila.enterprise_id })
+      borrar_fotos_local(fila.id)
+      return true
     },
     async listarPublicados({ ciudad } = {}) {
       // D3: todos los locales se publican; el local interno "sin local" nunca se lista

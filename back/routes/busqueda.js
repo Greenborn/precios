@@ -4,7 +4,10 @@ module.exports = router
 const bcrypt = require('bcrypt')
 const fs = require("fs")
 const busqueda_productos = require("../controllers/busqueda_productos")
+const precios_negocio = require("../controllers/precios_negocio")
 const utils = require("../helpers/utils")
+const { branches_publicos } = require("../helpers/branch_publico")
+const { precios_publicos } = require("../helpers/precio_publico")
 
 // Orden por grupo (todas las palabras / alguna), cantidad de coincidencias y precio
 async function hacer_busqueda( termino, orden ){
@@ -16,10 +19,12 @@ async function hacer_busqueda( termino, orden ){
       if (productos){
 
         // Una sucursal faltante en el diccionario no debe tirar abajo toda la búsqueda
-        // Ventana hoy+ayer aplicada al responder (la purga del índice corre cada 15 min)
+        // Ventana hoy+ayer aplicada al responder (la purga del índice corre cada 15 min),
+        // salvo para sucursales de negocios: sus precios siempre están vigentes
         const desde = inicio_de_ayer().getTime()
         resolve(productos.filter(p => {
           if (!global.branchs_diccio[Number(p.branch_id)]) return false
+          if (precios_negocio.es_negocio(p.branch_id)) return true
           const t = new Date(p.date_time).getTime()
           return isNaN(t) || t >= desde
         }))
@@ -69,7 +74,6 @@ async function hacer_busqueda_alquiler( termino, metodo ){
                 "product_id": propiedades[i].id,
                 "price": propiedades[i].precio,
                 "date_time": new Date(propiedades[i].ultima_fecha).getTime(),
-                "user_id": null,
                 "branch_id": '',
                 "es_oferta": 0,
                 "porcentage_oferta": null,
@@ -139,7 +143,7 @@ function registrar_historial(query, cant, req) {
     .catch(err => console.log('[busqueda] error registrando historial', err.message))
 }
 
-// Ventana de vigencia común a precios y ofertas: hoy + ayer (margen de un día)
+// Ventana de vigencia de ofertas y precios de locales comunes: hoy + ayer (margen de un día)
 function inicio_de_ayer() {
   let d = new Date()
   d.setHours(0,0,0,0)
@@ -157,7 +161,7 @@ function enriquecer(items) {
     const branch = global.branchs_diccio[Number(item.branch_id)]
     if (!branch) continue
     item.empresa = global.enterprice_diccio[Number(branch.enterprise_id)]
-    item.locales = global.branch_enterprice_diccio[Number(branch.enterprise_id)]
+    item.locales = branches_publicos(global.branch_enterprice_diccio[Number(branch.enterprise_id)])
   }
   return items
 }
@@ -222,7 +226,7 @@ router.get('/precios', async function (req, res) {
     if (resultado.pagina === 1)
       registrar_historial(product_name, resultado.total, req)
 
-    res.status(200).send({ stat: true, ...resultado })
+    res.status(200).send({ stat: true, ...resultado, items: precios_publicos(resultado.items) })
   } catch (error) {
     console.log('[busqueda/precios] error', error)
     res.status(200).send({ stat: false, items: [], total: 0, error: true })
@@ -275,7 +279,6 @@ async function hacer_busqueda_promo( termino, metodo ){
                 "product_id": promos[i].id_producto,
                 "price": promos[i].precio,
                 "date_time": new Date(promos[i].fecha).getTime(),
-                "user_id": null,
                 "branch_id": promos[i].branch_id,
                 "es_oferta": 1,
                 "porcentage_oferta": null,
@@ -288,7 +291,7 @@ async function hacer_busqueda_promo( termino, metodo ){
                   "name": global.enterprice_diccio[Number(branch.enterprise_id)]?.name,
                   "url_website": ""
                 },
-                "locales": global.branch_enterprice_diccio[Number(branch.enterprise_id)],
+                "locales": branches_publicos(global.branch_enterprice_diccio[Number(branch.enterprise_id)]),
                 "caracteristicas": caracteristicas,
                 "products": {
                   "id": promos[i].id,
@@ -331,7 +334,7 @@ router.get('/promociones', async function (req, res) {
     if (resultado.pagina === 1 && !TODAS)
       registrar_historial(product_name, resultado.total, req)
 
-    res.status(200).send({ stat: true, ...resultado })
+    res.status(200).send({ stat: true, ...resultado, items: precios_publicos(resultado.items) })
   } catch {
     res.status(200).send({ stat: false, items: [], error: true })
   }  
@@ -358,7 +361,7 @@ router.get('/info_comercio', async function (req, res) {
             stat: true,
             items: {
                 enterprice,
-                branches
+                branches: branches_publicos(branches)
             }
         })
 

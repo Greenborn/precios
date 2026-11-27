@@ -4,6 +4,7 @@
 const express = require('express')
 var router = express.Router()
 module.exports = router
+const { sincronizar_comercio } = require('../controllers/comercios_cache')
 
 function responder_ok(res, data) {
   return res.status(200).send({ stat: true, data })
@@ -96,6 +97,7 @@ router.put('/put_one', async function (req, res) {
     if (!local) return responder_err(res, 'El local no existe')
 
     await global.knex('branch').where({ id }).update({ publicado })
+    await sincronizar_comercio(global.knex, { branch_id: id })
     responder_ok(res, { id, publicado })
   } catch (error) {
     console.log('[locales_admin] Error en put_one:', error)

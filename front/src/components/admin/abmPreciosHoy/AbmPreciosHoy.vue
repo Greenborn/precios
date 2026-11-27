@@ -1,5 +1,5 @@
 <template>
-  <AbmShell subtitle="Precios de hoy cargados en la caché en memoria del servidor. Solo lectura.">
+  <AbmShell subtitle="Precios con fecha desde ayer cargados en la caché en memoria del servidor. Solo lectura.">
     <CrudModulo
       recurso="precios_hoy"
       endpoint="/precios_hoy"
