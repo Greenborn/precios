@@ -1,6 +1,6 @@
 {
   "name": "precios_back",
-  "version": "1.8.38",
+  "version": "1.8.39",
   "description": "",
   "main": "server.js",
   "scripts": {
